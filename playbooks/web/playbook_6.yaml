@@ -1,0 +1,12 @@
+id: web-006
+name: SQLi Auth Bypass / Data Extraction
+target_type: web_service
+phase: inject
+steps:
+  - recon: "Enumerate endpoints, login forms, params"
+  - fingerprint: "Identify DB from error markers"
+  - probe: ["' OR 1=1--", "1=1/1=2 boolean", "time-based sleep"]
+  - automate: "sqlmap --batch (captured request)"
+  - verify: "Confirm auth bypass / extraction, repeat once"
+  - poc: "Record raw request + dumped content"
+side_effect_free: false

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tanli"
+version = "0.0.1b0"
+description = "探驪 Tanli - 自主紅隊測試 Agent(LLM + Web 雙軌安全評估)"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "httpx>=0.27",
+    "pydantic>=2",
+    "PyJWT>=2.8",
+    "cryptography>=42",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# LLM judge uses the OpenAI SDK against any OpenAI-compatible endpoint.
+# (litellm/langgraph are planned by the spec but not imported yet — add them
+# back when the planner/mutator land to keep the supply-chain surface honest.)
+llm = [
+    "openai>=1.40",
+]
+# 開發/測試專用(不進 runtime):cvss 僅用於 test_cvss.py 的官方公式交叉驗證。
+dev = [
+    "pytest>=8",
+    "cvss>=3",
+]
+
+[project.scripts]
+# 分發名/CLI 為 tanli(探驪);Python 模組名保留 redteam(向後相容,import 路徑不變)
+tanli = "redteam.cli:app"
+redteam = "redteam.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["redteam*"]

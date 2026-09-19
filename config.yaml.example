@@ -1,0 +1,36 @@
+# RedTeam Agent config - environment specific, do NOT commit secrets here
+llm:
+  # Planner: DAG/strategy brain
+  planner:
+    provider: openai
+    model: gpt-4o
+
+  # Mutator: payload mutation engine
+  mutator:
+    provider: litellm
+    model: anthropic/claude-3-haiku
+
+  # Judge: secondary verification - OpenAI-compatible API (configurable)
+  # Set base_url to your OpenAI-compatible endpoint (vLLM/ollama/proxy/etc).
+  # API key comes from env: REDTEAM_JUDGE_API_KEY or OPENAI_API_KEY
+  judge:
+    provider: openai_compatible
+    model: gpt-4o
+    base_url: https://api.openai.com/v1   # <-- your OpenAI-compatible endpoint
+
+  # Fallback only if judge unavailable
+  fallback:
+    provider: ollama
+    model: qwen2.5:14b
+
+  token_budget: 500000
+  judge_temperature: 0.0    # deterministic: temp=0, fixed seed
+  judge_seed: 42
+
+runtime:
+  llm_timeout: 30
+  web_timeout: 600
+  job_timeout: 1800
+  rate_limit_qps: 10
+  per_endpoint_concurrency: 2
+  hard_stop: false
