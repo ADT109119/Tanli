@@ -712,6 +712,9 @@ def agent(
     read_only: bool = typer.Option(False, "--read-only", help="生產保險絲:物理封鎖非安全方法"),
     auth_header: Optional[str] = typer.Option(None, "--auth-header", help="附加標頭,值絕不進報告"),
     no_docker: bool = typer.Option(False, "--no-docker", help="不給 nuclei 動態嘗試能力"),
+    roe_file: Optional[str] = typer.Option(None, "--roe", help="Rules of Engagement YAML(tanli roe --init 產生)"),
+    workspace_dir: str = typer.Option("workspaces", "--workspace",
+                                      help="engagement 工作區目錄(跨會話記憶+大輸出卸載);'none' 關閉"),
 ):
     """自主 Agent 模式:LLM tool-loop 自行規劃多步驟探測(指紋→產品級CVE→動態嘗試)。
 
@@ -719,6 +722,9 @@ def agent(
     的 tool loop),但所有工具都在 ScopeGuard/read-only/預算圍籬內,模型繞不過。
     """
     from .agent import AgentTools, OpenAIBrain, run_agent
+    from .engagement import (RoE, build_opplan, detect_target_type,
+                             save_engagement_package)
+    from .workspace import Workspace
 
     cfg = Config.load(config_path)
     try:
@@ -752,7 +758,25 @@ def agent(
     elif not no_docker:
         console.print("[yellow]無 Docker → nuclei_cve_probe 動態嘗試不可用(agent 會如實回報)[/]")
 
-    tools = AgentTools(http, target, docker_bridge=bridge)
+    # ---- 作戰紀律包(借鑑 Decepticon):先定紀律,再放行 ----
+    roe = RoE.load(roe_file)
+    ws = None
+    if workspace_dir.lower() != "none":
+        ws = Workspace.open(target, base=workspace_dir)
+    target_type = detect_target_type(goal or target)
+    opplan = build_opplan(target_type, roe)
+    brief_parts = [roe.as_prompt_block(), opplan]
+    if ws is not None:
+        mem_block = ws.memory_prompt_block()
+        if mem_block:
+            brief_parts.append(mem_block)
+        console.print(f"[cyan]工作區: {ws.root}(跨會話記憶啟用)[/]")
+    engagement_brief = "\n\n".join(brief_parts)
+    pkg_path = save_engagement_package(
+        ws.root if ws else Path("state"), target, roe, opplan)
+    console.print(f"[cyan]Engagement package: {pkg_path}[/]")
+
+    tools = AgentTools(http, target, docker_bridge=bridge, workspace=ws)
     tools.max_probes = probes
     try:
         brain = OpenAIBrain(cfg.llm.get("judge", {}))
@@ -765,7 +789,8 @@ def agent(
     result = run_agent(tools, brain,
                        goal=goal or ("雙軌安全評估:識別真實元件/框架 → 產品級 CVE 核實 → "
                                      "動態嘗試確認;記錄所有有證據的發現"),
-                       max_steps=steps, token_budget=token_budget, console=console)
+                       max_steps=steps, token_budget=token_budget, console=console,
+                       engagement_brief=engagement_brief)
     console.print(f"[bold]Agent 完成[/] steps={result.steps} probes={result.probes} "
                   f"tokens={result.tokens} finished={result.finished}")
     if result.summary:
@@ -774,13 +799,19 @@ def agent(
     from .findings import Finding
     from .report import ReportGenerator
     report = ReportGenerator(target, "hybrid", redact_mode="full" if full else "auto")
-    for i, f in enumerate(result.findings, 1):
+    # 報告按 triage 風險分排序(借鑑 CypherFix:高 likelihood 先修)
+    ordered = sorted(result.findings,
+                     key=lambda f: (f.triage_score, f.confidence), reverse=True)
+    for i, f in enumerate(ordered, 1):
         # agent finding → 標準 Finding(CVSS 由 annotate_cvss 就地標注)
         from .cvss import annotate_cvss
+        triage_note = (f" (triage={f.triage_score}"
+                       + (f" kev={f.kev}" if f.kev else "") + ")") if f.triage_score >= 0 else ""
         fd = Finding(
             id=f"agent-{i:02d}", attack_surface="hybrid",
             category=f.category + (f":{f.cve}" if f.cve else ""),
-            severity=f.severity, title=f.title, description=f.description,
+            severity=f.severity, title=f.title + triage_note,
+            description=f.description,
             steps=["autonomous agent loop"], poc=f.evidence[:1500] or None,
             confidence=f.confidence,
             evidence=f.evidence[:2000], source="agent", owasp="A06" if f.cve else "",
@@ -793,6 +824,24 @@ def agent(
     ck.parent.mkdir(exist_ok=True)
     ck.write_text(json.dumps(result.transcript, ensure_ascii=False, indent=1))
     console.print(f"[dim]Transcript: {ck}[/]")
+
+
+@app.command()
+def roe(
+    init: Optional[str] = typer.Option(None, "--init", help="在指定路徑產生 RoE YAML 範本"),
+    show: Optional[str] = typer.Option(None, "--show", help="預覽既有 RoE 檔的 prompt 注入效果"),
+):
+    """作戰紀律(RoE)管理:產生範本 / 預覽 agent 將看到的紀律宣告。"""
+    from .engagement import RoE, new_roe_template
+    if init:
+        p = new_roe_template(init)
+        console.print(f"[green]RoE 範本: {p}[/] 依實際授權範圍編輯後用 --roe 指定")
+        return
+    if show:
+        r = RoE.load(show)
+        console.print(r.as_prompt_block())
+        return
+    console.print("[yellow]用法: tanli roe --init roe.yaml 或 tanli roe --show roe.yaml[/]")
 
 
 @app.command()

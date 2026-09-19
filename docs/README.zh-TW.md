@@ -90,7 +90,8 @@ tanli run http://127.0.0.1:8080 -t llm_app --scanners llm_playbook
 tanli scan http://127.0.0.1:8080 --scanner nuclei
 tanli run http://127.0.0.1:8080 -t llm_app --playbook playbooks/llm/playbook_1.yaml
 
-# 6. CVE 直查:CVE ID 精確查,或產品級(該套件/框架全部已發布 CVE,不按版本過濾)
+# 6. CVE 直查:精確 CVE ID,或產品級(該套件/框架全部已發布 CVE)
+#    附 EPSS 利用機率 + CISA KEV(已被真實利用)標記
 tanli cve CVE-2025-55182
 tanli cve django -e pip            # GHSA + OSV 雙源合併
 tanli cve nginx                    # 非套件生態自動改走 NVD 關鍵字查
@@ -98,8 +99,12 @@ tanli cve nginx                    # 非套件生態自動改走 NVD 關鍵字�
 # 7. 自主 Agent 模式:LLM tool-loop 自行決定每一步
 #    (指紋 → 產品級 CVE 核實 → 動態嘗試;絕不輕信目標自報版本)。
 #    所有工具都在 ScopeGuard/read-only/預算圍籬內執行,模型繞不過。
+#    作戰紀律:--roe 載入參戰規則,第一顆封包前先注入 RoE + MITRE ATT&CK
+#    對應 OPPLAN;--workspace 提供跨會話記憶 + 大輸出卸載(同目標重跑不
+#    會從零開始);目標回應一律過提示注入防護。
 tanli agent http://127.0.0.1:8080 --steps 30 --probes 60
 tanli agent TARGET --auth-cred credential.jws --public-key signer_public.pem --read-only
+tanli roe --init roe.yaml && tanli agent TARGET --roe roe.yaml
 ```
 
 `--scanners`:`auto`(預設:web→全部,llm_app→劇本)| `none` | `web_config` | `nuclei` | `sqlmap` | `zap` | `llm_playbook`。

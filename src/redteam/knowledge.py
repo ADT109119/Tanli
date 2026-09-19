@@ -172,3 +172,49 @@ def catalog(lib: list[PlaybookDoc]) -> list[dict]:
     return [{"id": d.id, "name": d.name, "owasp": d.owasp,
              "target_type": d.target_type, "executable": d.executable}
             for d in lib]
+
+
+# ---------------------------------------------------------------------------
+# 使用者可注入的 Markdown 技能(借鑑 RedAmon Chat/Agent Skills)
+# ---------------------------------------------------------------------------
+
+def user_skills_dir() -> Path:
+    """~/.tanli/skills/ — 用戶放 *.md 即成可查詢知識(不需重裝/不需改碼)。"""
+    return Path.home() / ".tanli" / "skills"
+
+
+def load_user_skills(extra_dirs: tuple[str, ...] = ()) -> list[PlaybookDoc]:
+    """載入 Markdown 技能檔。frontmatter(可選)給 id/name/owasp/target_type;
+    無 frontmatter 時用檔名/id.md。內容截 4000 字進 steps(省 token)。"""
+    dirs = [user_skills_dir()] + [Path(d) for d in extra_dirs]
+    docs: list[PlaybookDoc] = []
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.md")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            meta: dict[str, str] = {}
+            body = text
+            m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+            if m:
+                try:
+                    meta = {str(k): str(v) for k, v in
+                            (yaml.safe_load(m.group(1)) or {}).items()}
+                except Exception:  # noqa: BLE001
+                    meta = {}
+                body = text[m.end():]
+            doc_id = meta.get("id") or f"skill-{f.stem}"
+            docs.append(PlaybookDoc(
+                id=doc_id, name=meta.get("name", f.stem),
+                owasp=meta.get("owasp", ""),
+                target_type=meta.get("target_type", "any"),
+                phase=meta.get("phase", "on-demand"),
+                payload_policy="reference-only",
+                summary=(body.strip().splitlines() or [""])[0][:200],
+                steps=[{"kind": "reference", "name": f.name,
+                        "detail": body.strip()[:4000]}],
+                source=str(f), executable=False))
+    return docs

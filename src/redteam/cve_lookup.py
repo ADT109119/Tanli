@@ -24,6 +24,7 @@ import re
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 GHSA_API = "https://api.github.com/advisories"
 OSV_API = "https://api.osv.dev/v1/query"
@@ -73,6 +74,10 @@ class CveAdvisory:
     first_patched: str | None = None
     published: str = ""
     urls: list[str] = field(default_factory=list)
+    # EPSS/KEV 攻擊 likelihood 情報(enrich() 填入;None = 該源無資料,如實呈現)
+    epss: float | None = None
+    epss_percentile: float | None = None
+    kev: bool = False
 
 
 @dataclass
@@ -365,3 +370,92 @@ def _guess_ecosystem(product: str) -> str | None:
     if "/" in product:
         return "composer" if not re.match(r"^[a-z0-9._-]+\.[a-z0-9._-]+/", product) else "npm"
     return None
+
+
+# ---------------------------------------------------------------------------
+# 攻擊 likelihood 情報:EPSS + CISA KEV(借鑑 RedAmon vulnx 四源精神)
+# ---------------------------------------------------------------------------
+#
+# EPSS (api.first.org): 未來 14 天被利用的機率(0~1)。區分「有 CVE」與
+#   「真的會被拿起來打」— triage 排序的關鍵因子。
+# CISA KEV (known_exploited_vulnerabilities.json): 已在真實世界被利用的
+#   權威清單;命中 = 強制升級處置優先級。
+# 兩者都是控制平面公開 GET(零靶點流量),失敗如實回報,不阻斷主查詢。
+
+EPSS_API = "https://api.first.org/data/v1/epss"
+KEV_URL = ("https://www.cisa.gov/sites/default/files/feeds/"
+           "known_exploited_vulnerabilities.json")
+
+
+def epss_scores(cve_ids: list[str]) -> dict[str, dict]:
+    """批次 EPSS 分數。回傳 {CVE: {score, percentile}};查不到/失敗不入典
+    (呼叫端據缺漏如實標註,絕不臆測分數)。"""
+    out: dict[str, dict] = {}
+    ids = [c.upper() for c in cve_ids if re.match(r"^CVE-\d{4}-\d{4,7}$", c.upper())]
+    if not ids:
+        return out
+    for i in range(0, len(ids), 25):  # API 批次上限保守切
+        chunk = ids[i:i + 25]
+        url = EPSS_API + "?cve=" + ",".join(chunk)
+        try:
+            data = _get_json(url, timeout=20)
+        except Exception:  # noqa: BLE001 — EPSS 缺援不阻斷 CVE 查詢
+            continue
+        for row in data.get("data", []):
+            cve = (row.get("cve") or "").upper()
+            try:
+                out[cve] = {"score": float(row.get("epss", 0.0)),
+                            "percentile": float(row.get("percentile", 0.0))}
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def kev_set(cache_path: str | Path | None = None,
+            max_age_hours: int = 24) -> tuple[set[str], str]:
+    """CISA KEV CVE 集合(帶 24h 本地快取,避免重複抓 1.3MB)。
+    回傳 (set, status);status ∈ cached|fresh|stale-cache|unavailable。"""
+    import time as _t
+    cp = Path(cache_path) if cache_path else Path("state/kev_cache.json")
+    if cp.exists():
+        try:
+            cached = json.loads(cp.read_text(encoding="utf-8"))
+            if _t.time() - cached.get("_ts", 0) < max_age_hours * 3600:
+                return set(cached.get("cves", [])), "cached"
+        except (json.JSONDecodeError, OSError):
+            pass
+    try:
+        data = _get_json(KEV_URL, timeout=30)
+        cves = sorted({v.get("cveID", "").upper() for v in data.get("vulnerabilities", [])
+                       if v.get("cveID")})
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps({"_ts": _t.time(), "cves": cves}), encoding="utf-8")
+        return set(cves), "fresh"
+    except Exception:  # noqa: BLE001
+        if cp.exists():  # 網路掛但快取舊 → 如實標 stale 並沿用
+            try:
+                return set(json.loads(cp.read_text(encoding="utf-8")).get("cves", [])), \
+                    "stale-cache"
+            except (json.JSONDecodeError, OSError):
+                pass
+        return set(), "unavailable"
+
+
+def enrich(advs: list[CveAdvisory]) -> dict:
+    """對一批 advisories 補 EPSS/KEV 情報(就地寫入 a.summary 尾註記 +
+    回傳摘要 dict 給 tool 層)。失敗如實標 status,不編造分數。"""
+    cves = [a.cve for a in advs if re.match(r"^CVE-\d{4}-\d{4,7}$", a.cve or "", re.I)]
+    kev, kev_status = kev_set()
+    epss = epss_scores(sorted(set(cves)))
+    hit_kev = 0
+    for a in advs:
+        c = (a.cve or "").upper()
+        if c in kev:
+            a.kev = True
+            hit_kev += 1
+        e = epss.get(c)
+        if e:
+            a.epss = e["score"]
+            a.epss_percentile = e["percentile"]
+    return {"epss_covered": len(epss), "epss_requested": len(set(cves)),
+            "kev_status": kev_status, "kev_hits": hit_kev}

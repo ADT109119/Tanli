@@ -19,10 +19,15 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from .cve_lookup import lookup as cve_lookup_backend
-from .knowledge import catalog as kb_catalog, get_by_id as kb_get, load_library as kb_load, search as kb_search
+from .cve_lookup import enrich as cve_enrich, lookup as cve_lookup_backend
+from .guardtext import SYSTEM_RULE as GUARD_RULE, guard_observation
+from .knowledge import (catalog as kb_catalog, get_by_id as kb_get,
+                       load_library as kb_load, load_user_skills,
+                       search as kb_search)
 from .interactor import RedTeamHTTP
+from .triage import triage as triage_score, sort_findings
 from .version_watch import detect_releases, watch as version_watch
+from .workspace import ProbeLog, Workspace
 
 
 # ---------------------------------------------------------------------------
@@ -42,14 +47,17 @@ class AgentTools:
     add_finding / finish 由 loop 內部處理;這裡只實作探測/查詢類工具。
     """
 
-    def __init__(self, http: RedTeamHTTP, target: str, *, docker_bridge=None):
+    def __init__(self, http: RedTeamHTTP, target: str, *, docker_bridge=None,
+                 workspace: Workspace | None = None):
         self.http = http
         self.target = target
         self.docker_bridge = docker_bridge
         self.probe_count = 0
         self.max_probes = 60  # 硬性總探測量,防失控轟炸
+        self.ws = workspace  # None = 不啟用工作區(向後兼容)
         self._kb = None  # get_playbook 知識庫 lazy load
         self._get_cache: dict[str, ToolResult] = {}  # 安全方法結果快取(省預算)
+        self.probe_log: list[ProbeLog] = []  # 跨會話記憶的探測軌跡(含失敗)
 
     # ---- schema(提供給 brain) ----
     SCHEMAS: list[dict] = [
@@ -79,11 +87,13 @@ class AgentTools:
         },
         {
             "name": "cve_lookup",
-            "description": ("Query public CVE sources (GHSA + OSV + NVD). Give either "
+            "description": ("Query public CVE sources (GHSA + OSV + NVD) with EPSS "
+                            "likelihood + CISA KEV enrichment. Give either "
                             "cve_id (CVE-YYYY-NNNNN) for exact lookup, or product "
                             "(+ecosystem/version optional) for product-level listing of "
                             "ALL published CVEs — do not trust the target's claimed "
-                            "version, verify which versions are affected and probe."),
+                            "version, verify which versions are affected and probe. "
+                            "kev=true means actively exploited in the wild: verify first."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -92,6 +102,8 @@ class AgentTools:
                     "ecosystem": {"type": "string",
                                   "description": "npm|pip|composer|maven|go|cargo|rubygems..."},
                     "version": {"type": "string"},
+                    "likelihood": {"type": "boolean",
+                                   "description": "set false to skip EPSS/KEV enrichment (faster)"},
                 },
                 "required": [],
             },
@@ -130,9 +142,10 @@ class AgentTools:
         },
         {
             "name": "get_playbook",
-            "description": ("Query the built-in playbook library (attack theory / defense "
+            "description": ("Query the playbook library (attack theory / defense "
                             "checklist templates: OWASP GenAI LLM playbooks + web "
-                            "methodology). Call with no args to get a compact catalog; "
+                            "methodology + user-injected markdown skills from "
+                            "~/.tanli/skills). Call with no args to get a compact catalog; "
                             "then fetch full steps by id, or search by keyword/owasp. "
                             "Use playbooks as REFERENCE workflows for planning — they "
                             "encode standard attack/defense procedures."),
@@ -145,6 +158,37 @@ class AgentTools:
                     "target_type": {"type": "string", "description": "Filter: llm_app | web_service"},
                 },
                 "required": [],
+            },
+        },
+        {
+            "name": "read_tool_output",
+            "description": ("Read back an offloaded large tool output by its file path "
+                            "(only paths under this engagement's tool-outputs/ are "
+                            "allowed). Use when a previous result shows [OFFLOADED ...]."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "offset": {"type": "integer", "description": "char offset (default 0)"},
+                    "limit": {"type": "integer", "description": "max chars (default 6000)"},
+                },
+                "required": ["path"],
+            },
+        },
+        {
+            "name": "write_note",
+            "description": ("Persist a working note in the engagement workspace "
+                            "(notes/<name>.md). Survives across sessions — future "
+                            "runs on this target load findings/lessons automatically. "
+                            "Good for: hypotheses to test later, dead-end reasons, "
+                            "attack-surface maps."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "filename-safe name"},
+                    "content": {"type": "string"},
+                },
+                "required": ["name", "content"],
             },
         },
         {
@@ -162,6 +206,10 @@ class AgentTools:
                     "evidence": {"type": "string"},
                     "cve": {"type": "string"},
                     "confidence": {"type": "number"},
+                    "reachability": {"type": "string", "enum": [
+                        "direct", "low_priv", "auth_required",
+                        "user_interaction", "internal_only"],
+                        "description": "how reachable the flaw is for an attacker"},
                 },
                 "required": ["title", "severity", "description", "evidence"],
             },
@@ -202,16 +250,25 @@ class AgentTools:
         rec = self.http.request(method.upper(), url, headers=headers,
                                 data=body.encode() if body else None)
         if rec.blocked_by_scope:
+            self.probe_log.append(ProbeLog(m, url, "blocked-scope", ok=False))
             return ToolResult(False, {"blocked": "scope"}, "BLOCKED by ScopeGuard — outside authorized scope")
         if rec.blocked_by_readonly:
+            self.probe_log.append(ProbeLog(m, url, "blocked-readonly", ok=False))
             return ToolResult(False, {"blocked": "read_only"},
                               "BLOCKED by read-only fuse — non-safe method physically blocked")
+        self.probe_log.append(ProbeLog(m, url, rec.status, ok=(rec.status or 0) < 400))
         text = (rec.body or b"").decode("utf-8", "replace")
+        body_out = text[:3500]
+        if self.ws is not None and len(text) > 3500:
+            # 大輸出卸載(借鑑 RedAmon auto-offload):完整內容落盤,LLM 收 stub
+            body_out = self.ws.offload(f"http{rec.status}", text)
+        # 注入防護:目標內容包定界符 + 啟發式標記(借鑑 Decepticon)
+        body_out, _hits = guard_observation(body_out, source=url)
         out = ToolResult(True, {
             "status": rec.status,
             "headers": {k: v for k, v in (rec.response_headers or {}).items()
                         if k.lower() in ("server", "x-powered-by", "content-type", "generator", "via")},
-            "body_head": text[:3500],
+            "body": body_out,
             "body_len": len(text),
         })
         if m in ("GET", "HEAD", "OPTIONS") and body is None and not headers \
@@ -223,29 +280,50 @@ class AgentTools:
         self.probe_count += 1
         rec = self.http.request("GET", self.target)
         if rec.blocked_by_scope or rec.blocked_by_readonly:
+            self.probe_log.append(ProbeLog("GET", self.target, "blocked", ok=False))
             return ToolResult(False, None, "target blocked by scope/read-only")
+        self.probe_log.append(ProbeLog("GET", self.target, rec.status,
+                                       ok=(rec.status or 0) < 400))
         html = (rec.body or b"").decode("utf-8", "replace")
         releases = detect_releases(html)
         hdrs = {k: v for k, v in (rec.response_headers or {}).items()
                 if k.lower() in ("server", "x-powered-by", "generator", "via", "x-aspnet-version")}
         meta = re.findall(r'<meta[^>]+name=["\']generator["\'][^>]+content=["\']([^"\']+)',
                           html, re.I)
+        head = html[:2500]
+        if self.ws is not None and len(html) > 2500:
+            head = self.ws.offload("fingerprint", html)
+        head, _ = guard_observation(head, source=self.target)
         return ToolResult(True, {"status": rec.status, "headers": hdrs,
                                  "generator_meta": meta, "release_decls": releases,
-                                 "body_head": html[:2500]})
+                                 "body": head})
 
     def _t_cve_lookup(self, cve_id: str | None = None, product: str | None = None,
-                      ecosystem: str | None = None, version: str | None = None) -> ToolResult:
+                      ecosystem: str | None = None, version: str | None = None,
+                      likelihood: bool = True) -> ToolResult:
         r = cve_lookup_backend(cve_id=cve_id, product=product, ecosystem=ecosystem, version=version)
         if not r.ok:
             return ToolResult(False, {"error": r.error}, r.error)
+        intel = {}
+        if likelihood and r.advisories:
+            # EPSS + CISA KEV 情報加權(失敗如實標 status,不編造分數)
+            try:
+                intel = cve_enrich(r.advisories)
+            except Exception as e:  # noqa: BLE001
+                intel = {"kev_status": f"error({e.__class__.__name__})"}
         advs = [{"cve": a.cve, "src": a.source, "sev": a.severity, "product": a.product,
                  "range": a.vulnerable_range, "patched": a.first_patched,
-                 "pub": a.published, "summary": a.summary[:160]} for a in r.advisories]
+                 "pub": a.published, "epss": a.epss, "kev": a.kev,
+                 "summary": a.summary[:160]} for a in r.advisories]
+        # 高 likelihood 排前面(EPSS desc → KEV → severity),幫 agent 聚焦
+        advs.sort(key=lambda a: (-(a.get("epss") or 0), not a.get("kev"),
+                                 a["sev"] != "critical"))
         return ToolResult(True, {"sources": r.sources, "count": len(advs),
+                                 "likelihood_intel": intel or "未啟用或不可用",
                                  "latest_advisory_date": r.latest_advisory_date,
                                  "advisories": advs[:40]},
-                          "查無 CVE ≠ 無漏洞(注意資料源滯後;見 latest_advisory_date)")
+                          "查無 CVE ≠ 無漏洞(注意資料源滯後;見 latest_advisory_date);"
+                          "kev=true 的 CVE 已被真實利用,優先動態驗證")
 
     def _t_version_watch(self, product: str, version: str, ecosystem: str = "npm") -> ToolResult:
         wr = version_watch(product, ecosystem, version)
@@ -272,7 +350,8 @@ class AgentTools:
                         owasp: str | None = None,
                         target_type: str | None = None) -> ToolResult:
         if self._kb is None:
-            self._kb = kb_load()
+            # 內建 playbook + 使用者注入的 markdown 技能(~/.tanli/skills)
+            self._kb = kb_load() + load_user_skills()
         if id:
             doc = kb_get(self._kb, id)
             if doc is None:
@@ -289,6 +368,22 @@ class AgentTools:
                               "無符合項;看目錄改用 id")
         return ToolResult(True, {"count": len(hits),
                                  "playbooks": [d.render() for d in hits[:4]]})
+
+    def _t_read_tool_output(self, path: str, offset: int = 0,
+                            limit: int = 6000) -> ToolResult:
+        if self.ws is None:
+            return ToolResult(False, None, "工作區未啟用(--workspace 關閉)")
+        try:
+            return ToolResult(True, {"path": path,
+                                     "content": self.ws.read_tool_output(path, offset, limit)})
+        except ValueError as e:
+            return ToolResult(False, None, str(e))
+
+    def _t_write_note(self, name: str, content: str) -> ToolResult:
+        if self.ws is None:
+            return ToolResult(False, None, "工作區未啟用(--workspace 關閉)")
+        p = self.ws.write_note(name, str(content)[:20000])
+        return ToolResult(True, {"saved": str(p)})
 
     def _t_nuclei_cve_probe(self, cve_id: str) -> ToolResult:
         if not re.match(r"^(cve-\d{4}-\d{4,7}|ghsa-[a-z0-9-]+)$", cve_id, re.I):
@@ -342,6 +437,8 @@ Method rules (mandatory):
 6. Stay inside the authorized scope; prefer read-only observation. You have a hard
    probe budget and a token budget.
 7. When you have exhausted reasonable checks (or budget), call finish with a summary.
+""" + GUARD_RULE + """
+Keep working notes via write_note for anything worth carrying to a next session.
 Think step by step; one tool call per message."""
 
 
@@ -402,6 +499,9 @@ class AgentFinding:
     category: str = "agent"
     cve: str = ""
     confidence: float = 0.6
+    triage_score: float = -1.0
+    triage_factors: dict = field(default_factory=dict)
+    kev: bool = False
 
 
 @dataclass
@@ -413,18 +513,31 @@ class AgentRunResult:
     finished: bool = False
     summary: str = ""
     transcript: list[dict] = field(default_factory=list)
+    workspace: str = ""
+    engagement_package: str = ""
 
 
 def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
-              token_budget: int = 200_000, console=None) -> AgentRunResult:
-    """自主 tool-loop:brain 決定每一步,工具層圍籬兜底。"""
+              token_budget: int = 200_000, console=None,
+              engagement_brief: str = "") -> AgentRunResult:
+    """自主 tool-loop:brain 決定每一步,工具層圍籬兜底。
+
+    engagement_brief: RoE + OPPLAN + 跨會話記憶 的合成文本(借鑑
+    Decepticon「行動前先注入紀律」;空字串 = 純預設行為)。
+    """
     result = AgentRunResult()
+    if tools.ws is not None:
+        result.workspace = str(tools.ws.root)
+    opening = (f"Authorized target: {tools.target}\nGoal: {goal}\n"
+               f"Hard limits: max {max_steps} steps, {tools.max_probes} HTTP probes. ")
+    if engagement_brief:
+        opening += ("\nEngagement discipline (read before acting):\n" + engagement_brief
+                    + "\nBegin with fingerprinting, then execute the OPPLAN phases.")
+    else:
+        opening += "Begin with fingerprinting, then plan your checks."
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": (
-            f"Authorized target: {tools.target}\nGoal: {goal}\n"
-            f"Hard limits: max {max_steps} steps, {tools.max_probes} HTTP probes. "
-            f"Begin with fingerprinting, then plan your checks.")},
+        {"role": "user", "content": opening},
     ]
     for step_i in range(max_steps):
         try:
@@ -445,19 +558,37 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
 
         tool, args = out.get("tool", ""), out.get("args", {})
         if tool == "add_finding":
+            cve_arg = str(args.get("cve", ""))
+            # triage(借鑑 CypherFix):固定公式風險分,確定性可稽核
+            kev_hit = False
+            epss_val: float | None = None
+            try:
+                if re.match(r"^CVE-\d{4}-\d{4,7}$", cve_arg, re.I):
+                    from .cve_lookup import kev_set as _kev_set
+                    kev_map, _st = _kev_set()
+                    kev_hit = cve_arg.upper() in kev_map
+            except Exception:  # noqa: BLE001 — KEV 不可用不阻斷記錄
+                pass
+            tr = triage_score(severity=str(args.get("severity", "info")),
+                              confidence=float(args.get("confidence", 0.6)),
+                              cve_epss=epss_val, kev=kev_hit,
+                              reachability=str(args.get("reachability", "direct")))
             f = AgentFinding(
                 title=str(args.get("title", ""))[:200],
                 severity=str(args.get("severity", "info")).lower(),
                 description=str(args.get("description", ""))[:2000],
                 evidence=str(args.get("evidence", ""))[:2000],
                 category=str(args.get("category", "agent")),
-                cve=str(args.get("cve", "")),
+                cve=cve_arg,
                 confidence=float(args.get("confidence", 0.6)),
+                triage_score=tr.score, triage_factors=tr.factors, kev=kev_hit,
             )
             result.findings.append(f)
-            obs = ToolResult(True, {"recorded": f.title})
+            obs = ToolResult(True, {"recorded": f.title,
+                                    "triage": tr.as_dict()})
             if console:
-                console.print(f"    [green]✎ finding: {f.title} ({f.severity})[/]")
+                console.print(f"    [green]✎ finding: {f.title} ({f.severity}"
+                              f" | triage {tr.score})[/]")
         elif tool == "finish":
             result.finished = True
             s = str(args.get("summary", "")).strip() or thought.strip()
@@ -490,4 +621,29 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
         result.summary = result.summary or f"達成 max_steps={max_steps} 上限,未明確 finish"
 
     result.probes = tools.probe_count
+
+    # ---- 收尾:EPSS 回填 triage(批次一次)+ 跨會話記憶累加 ----
+    cve_findings = [f for f in result.findings
+                    if re.match(r"^CVE-\d{4}-\d{4,7}$", f.cve or "", re.I)]
+    if cve_findings:
+        try:
+            from .cve_lookup import epss_scores
+            scores = epss_scores([f.cve for f in cve_findings])
+            for f in cve_findings:
+                e = scores.get(f.cve.upper())
+                if e:
+                    tr = triage_score(severity=f.severity, confidence=f.confidence,
+                                      cve_epss=e["score"], kev=f.kev)
+                    f.triage_score, f.triage_factors = tr.score, tr.factors
+        except Exception:  # noqa: BLE001 — EPSS 缺援保留 severity 預設分
+            pass
+    if tools.ws is not None:
+        fdicts = [{"title": f.title, "severity": f.severity, "cve": f.cve,
+                   "triage_score": f.triage_score} for f in result.findings]
+        pdicts = [p.to_dict() for p in tools.probe_log]
+        lessons = [t.get("note", "") for t in result.transcript
+                   if not t.get("ok") and t.get("note")]
+        tools.ws.append_session(fdicts, pdicts,
+                                [l for l in lessons if l][:10],
+                                result.summary or "")
     return result

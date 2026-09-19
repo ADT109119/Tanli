@@ -91,6 +91,7 @@ tanli scan http://127.0.0.1:8080 --scanner nuclei
 tanli run http://127.0.0.1:8080 -t llm_app --playbook playbooks/llm/playbook_1.yaml
 
 # 6. CVE lookup: exact CVE id, or product-level (ALL published CVEs of a package/framework)
+#    Enriched with EPSS exploit-likelihood + CISA KEV (known-exploited) flags.
 tanli cve CVE-2025-55182
 tanli cve django -e pip            # GHSA + OSV merged, no version filter
 tanli cve nginx                    # non-package ecosystems fall back to NVD keyword search
@@ -98,8 +99,13 @@ tanli cve nginx                    # non-package ecosystems fall back to NVD key
 # 7. Autonomous agent mode: LLM tool-loop plans every step itself
 #    (fingerprint -> product-level CVE lookup -> dynamic attempt; never trusts
 #     self-reported versions). All tools run inside ScopeGuard/read-only/budget fences.
+#    Engagement discipline: --roe loads a Rules-of-Engagement file and injects
+#    RoE + MITRE ATT&CK-mapped OPPLAN before the first packet (Decepticon-style);
+#    --workspace gives per-target cross-session memory + large-output offload
+#    (RedAmon-style); target responses pass prompt-injection guards.
 tanli agent http://127.0.0.1:8080 --steps 30 --probes 60
 tanli agent TARGET --auth-cred credential.jws --public-key signer_public.pem --read-only
+tanli roe --init roe.yaml && tanli agent TARGET --roe roe.yaml
 ```
 
 `--scanners`: `auto` (default: web → all, llm_app → playbooks) | `none` | `web_config` | `nuclei` | `sqlmap` | `zap` | `llm_playbook`.
