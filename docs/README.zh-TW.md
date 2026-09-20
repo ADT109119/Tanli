@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/logo.png" alt="探驪 Tanli logo" width="160" />
+  <img src="../assets/logo.png" alt="探驪 Tanli logo" width="160" />
 </p>
 
 <h1 align="center">探驪 Tanli</h1>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/banner.jpg" alt="探驪 Tanli banner — 深入目標之淵，取回漏洞之珠" width="92%" />
+  <img src="../assets/banner.jpg" alt="探驪 Tanli banner — 深入目標之淵，取回漏洞之珠" width="92%" />
 </p>
 
 **自主紅隊測試 Agent** — 同時評估 LLM 應用與傳統網頁服務的安全。深入目標之淵，取回潛藏的漏洞之珠。
