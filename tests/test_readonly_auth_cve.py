@@ -18,7 +18,7 @@ from redteam.target_lab import TargetLab
 from redteam.version_watch import detect_releases, version_in_range, version_lt, watch
 
 REPO = Path(__file__).parent.parent
-PB1 = str(REPO / "playbooks" / "llm" / "playbook_1.yaml")
+PB1 = str(REPO / "src" / "redteam" / "playbooks" / "llm" / "playbook_1.yaml")
 
 
 # ---------------------------------------------------------------------------

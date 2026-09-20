@@ -29,9 +29,12 @@ from .playbook import PlaybookLoader
 
 
 def _pkg_playbooks(*sub: str) -> Path:
-    """package-relative playbooks 路徑(支援從任意 cwd 執行)。"""
-    here = Path(__file__).resolve().parent  # src/redteam
-    return here.parent.parent.joinpath("playbooks", *sub)
+    """package-relative playbooks 路徑(支援從任意 cwd/安裝環境執行)。
+
+    playbooks/ 是套件資料(隨 wheel 分發),位于 redteam/playbooks/。
+    """
+    here = Path(__file__).resolve().parent  # .../redteam
+    return here.joinpath("playbooks", *sub)
 
 
 def _dirs(default_dirs: tuple[str, ...]) -> list[Path]:

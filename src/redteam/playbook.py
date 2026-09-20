@@ -390,9 +390,9 @@ def load_playbooks(playbook_dir: str = "playbooks/llm", single: str | None = Non
 
     d = Path(playbook_dir)
     if not d.exists():
-        # Fallback: package-relative path
-        here = Path(__file__).resolve().parent  # src/redteam
-        d = here.parent.parent / "playbooks" / "llm"
+        # Fallback: package-relative path (installed wheels & repo layout alike)
+        here = Path(__file__).resolve().parent  # .../redteam
+        d = here / "playbooks" / "llm"
     if not d.exists():
         print(f"[playbook] no playbook directory found at {playbook_dir}", file=sys.stderr)
         return []

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/logo.png" alt="探驪 Tanli logo" width="160" />
+  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/logo.png" alt="探驪 Tanli logo" width="160" />
 </p>
 
 <h1 align="center">探驪 Tanli</h1>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="../assets/banner.jpg" alt="探驪 Tanli banner — 深入目標之淵，取回漏洞之珠" width="92%" />
+  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/banner.jpg" alt="探驪 Tanli banner — 深入目標之淵，取回漏洞之珠" width="92%" />
 </p>
 
 **自主紅隊測試 Agent** — 同時評估 LLM 應用與傳統網頁服務的安全。深入目標之淵，取回潛藏的漏洞之珠。
@@ -88,7 +88,7 @@ tanli run http://127.0.0.1:8080 -t llm_app --scanners llm_playbook
 
 # 5. 單一掃描器 / 單一劇本
 tanli scan http://127.0.0.1:8080 --scanner nuclei
-tanli run http://127.0.0.1:8080 -t llm_app --playbook playbooks/llm/playbook_1.yaml
+tanli run http://127.0.0.1:8080 -t llm_app --playbook src/redteam/playbooks/llm/playbook_1.yaml
 
 # 6. CVE 直查:精確 CVE ID,或產品級(該套件/框架全部已發布 CVE)
 #    附 EPSS 利用機率 + CISA KEV(已被真實利用)標記

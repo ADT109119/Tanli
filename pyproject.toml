@@ -9,6 +9,19 @@ description = "探驪 Tanli - 自主紅隊測試 Agent(LLM + Web 雙軌安全評
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
 dependencies = [
     "typer>=0.12",
     "rich>=13",
@@ -32,6 +45,11 @@ dev = [
     "cvss>=3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ADT109119/Tanli"
+Repository = "https://github.com/ADT109119/Tanli"
+Issues = "https://github.com/ADT109119/Tanli/issues"
+
 [project.scripts]
 # 分發名/CLI 為 tanli(探驪);Python 模組名保留 redteam(向後相容,import 路徑不變)
 tanli = "redteam.cli:app"
@@ -40,3 +58,7 @@ redteam = "redteam.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["redteam*"]
+
+[tool.setuptools.package-data]
+# 知識庫 playbook YAML 是套件資料:隨 wheel/sdist 分發,安裝後即可用
+redteam = ["playbooks/llm/*.yaml", "playbooks/web/*.yaml"]

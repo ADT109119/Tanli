@@ -17,7 +17,7 @@ from redteam.playbook import LLMTarget, PlaybookEngine, load_playbooks
 from redteam.target_lab import TargetLab
 
 REPO = Path(__file__).parent.parent
-PB1 = str(REPO / "playbooks" / "llm" / "playbook_1.yaml")
+PB1 = str(REPO / "src" / "redteam" / "playbooks" / "llm" / "playbook_1.yaml")
 
 
 def _run_playbook(behavior: str) -> tuple[list, list]:

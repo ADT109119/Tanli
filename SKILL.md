@@ -144,7 +144,7 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
 目標是 LLM API / RAG / AI agent 時：`tanli run <url> -t llm_app --scanners llm_playbook`
 內含 5 本 OWASP GenAI playbook（越獄、提示注入、系統提示洩漏、過度代理、輸出處理），
 基線對照 + 哨標 + 確定性規則 + LLM judge 二審。playbook 為 YAML 知識庫
-（`playbooks/{web,llm}/*.yaml`），可直接擴寫；`--playbook <file>` 指定單本。
+（`src/redteam/playbooks/{web,llm}/*.yaml`），可直接擴寫；`--playbook <file>` 指定單本。
 
 ## 8. 產出物位置
 

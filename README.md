@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Tanli logo" width="160" />
+  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/logo.png" alt="Tanli logo" width="160" />
 </p>
 
 <h1 align="center">探驪 Tanli</h1>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/banner.jpg" alt="Tanli banner — dive into the target, back with the findings" width="92%" />
+  <img src="https://raw.githubusercontent.com/ADT109119/Tanli/main/assets/banner.jpg" alt="Tanli banner — dive into the target, back with the findings" width="92%" />
 </p>
 
 **An autonomous red-team agent** that assesses both LLM applications and classic web services. Dive into the abyss of the target; come back with the pearl of the finding.
@@ -88,7 +88,7 @@ tanli run http://127.0.0.1:8080 -t llm_app --scanners llm_playbook
 
 # 5. Single scanner / single playbook
 tanli scan http://127.0.0.1:8080 --scanner nuclei
-tanli run http://127.0.0.1:8080 -t llm_app --playbook playbooks/llm/playbook_1.yaml
+tanli run http://127.0.0.1:8080 -t llm_app --playbook src/redteam/playbooks/llm/playbook_1.yaml
 
 # 6. CVE lookup: exact CVE id, or product-level (ALL published CVEs of a package/framework)
 #    Enriched with EPSS exploit-likelihood + CISA KEV (known-exploited) flags.

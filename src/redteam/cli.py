@@ -958,7 +958,7 @@ def self_test():
     from .playbook import LLMTarget, PlaybookEngine, load_playbooks
 
     pb_path = (
-        Path(__file__).resolve().parent.parent.parent
+        Path(__file__).resolve().parent
         / "playbooks" / "llm" / "playbook_1.yaml"
     )
     llm_findings: list = []
