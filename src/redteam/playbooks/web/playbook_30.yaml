@@ -1,0 +1,29 @@
+id: web-030
+name: "版本庫與建置殘件暴露:.git/.svn/.hg 目錄、SourceMap 與備份檔輪轉"
+owasp: A02 (OWASP Top10 2025 Security Misconfiguration) + A01
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉 + Jsmon/git-exposed 研究:原始碼外洩最常見路徑不是駭客入侵,
+  而是部署工藝缺陷——開發者在生產 web root 直接 git clone / git pull,或用
+  rsync 全量同步未排除 .git,導致整個版本庫歷史公讀。危害遠大於『看到當前
+  原始碼』:objects/ 保存每一個歷史 blob,即使當下版本已脫敏,歷史提交裡挖出
+  硬編碼 DB 密碼、API key、內部主機名是常態(『已刪掉』≠『已消失』);
+  config 檔的 remote URL 可能內嵌帶 token 的克隆地址;logs/HEAD reflog
+  洩開發者活動軌跡。同族暴露:部署殘留 backup.sql、dumper.php、
+  web 根目錄的 *.zip/*.tar.gz 打包備份、webpack SourceMap(.js.map)
+  完整還原前端邏輯與內嵌 key。檢測側關鍵技巧:.git/HEAD 內容恆為
+  'ref: refs/heads/main'(等)固定字串、.git/config 有 [core] 段——
+  掃描器以這兩個『魔法字串』判定,誤報率近零。本劇全部被動 HEAD/小體量
+  GET 判存在,嚴禁 git-dumper 式全量拉取(大量請求+把原始碼落盤=超唯讀紅線),
+  證據僅存端點與魔法字串命中事實。
+
+steps:
+  - probe: "存在性雙字串判定(各一發 GET):GET /.git/HEAD(200+body 以 'ref: refs/' 開頭=實錘)、GET /.git/config(200+含 '[core]' 段)。同族輪轉:.svn/entries、.hg/hgrc、.bzr/README、CVS/Root。全部 HEAD 或限長 GET,單檔判存在即止,嚴禁遞迴拉取 objects 重建倉庫。"
+  - probe: "建置殘件輪轉(HEAD 判存在):/backup.sql /database.sql /dump.sql /db.tar.gz /site.zip /public/backups/、Laravel /storage/export/、編輯器殘留(.DS_Store 洩目錄結構、Thumbs.db)。以 HEAD Content-Length 粗判體量;任何可下載檔案一律不真正下載落盤,證據=URL+大小+最後修改時間。"
+  - probe: "SourceMap 與前端洩漏(被動):從頁面引用的 JS 找 //# sourceMappingURL= 註釋;存在 .js.map 時評估是否含原始變數名/內網 URL/內嵌 key(只抽樣看響應前段判定洩漏等級,不整檔入庫)。webpack 站常連 node_modules 路徑結構一起洩,列入暴露面清單。"
+  - note: "報告敘事與修復:.git 暴露=Critical(等同全史原始碼+歷史憑證外洩;修復不是擋掉就好——git log -p 全史輪換所有歷史中出現過的憑據,git filter-repo 清史,部署改 git archive/rsync --exclude=.git + nginx location ~ /\\.(git|svn|hg) { deny all; })。備份檔可下載=High(移出版本庫+移出 web root+輪換內嵌憑據);SourceMap 含敏感=Medium(生產關 source-map 或僅傳錯誤監控平台)。"
+  - reference: "來源:Jsmon《Git Directory Exposure》(web root git clone 事故譜、objects/refs/config/index 各檔情報價值)、simonkoeck/git-exposed 與 GitSheriff 檢測器原理(HEAD/config 魔法字串)、OWASP WSTG 4.04.06 Test for Debugging Code & 4.04.03;修復工具鏈:git filter-repo、gitleaks/trufflehog 掃歷史。"

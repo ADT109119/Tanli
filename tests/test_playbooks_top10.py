@@ -79,6 +79,30 @@ def test_llm_jailbreak_expansion_playbooks():
     assert "example.invalid" in r9
 
 
+def test_framework_exposure_playbooks():
+    """框架暴露面族(27-30):WordPress/Laravel-Django 調試/Actuator/.git 暴露入庫可查。"""
+    lib = load_library()
+    for q, tid in [("wordpress", "web-027"), ("xmlrpc", "web-027"),
+                   ("wp-config", "web-027"), ("laravel", "web-028"),
+                   ("phpinfo", "web-028"), ("django", "web-028"),
+                   ("actuator", "web-029"), ("heapdump", "web-029"),
+                   ("jolokia", "web-029"), (".git", "web-030"),
+                   ("sourcemap", "web-030")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    # 全部非執行型(方法論),且證據紀律入庫:得 200 也不落地 secret
+    for n in range(27, 31):
+        d = get_by_id(lib, f"web-{n:03d}")
+        assert d is not None and not d.executable, f"web-{n:03d} 必須是方法論劇本"
+        assert d.payload_policy == "methodology-only"
+    d27 = get_by_id(lib, "web-027")
+    assert d27 is not None and "WPScan" in d27.render()
+    d29 = get_by_id(lib, "web-029")
+    assert d29 is not None and "heapdump" in d29.render()
+    # 嚴禁全量拉取/施壓的紅線敘事必須在知識文本裡
+    assert "嚴禁" in d29.render() and "嚴禁" in get_by_id(lib, "web-030").render()
+
+
 def test_operator_doc_playbooks():
     """操作者文件《現代 Web 攻擊底層邏輯》提煉的六本(21-26)+web-006 升級入庫可查。"""
     lib = load_library()

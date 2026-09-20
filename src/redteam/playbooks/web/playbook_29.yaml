@@ -1,0 +1,31 @@
+id: web-029
+name: "Spring Boot Actuator 端點暴露:/env /heapdump /jolokia 與閘道 RCE 鏈"
+owasp: A01/A02 (存取控制失效+安全配置錯誤) + API1/API3
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  Wiz 研究提煉:Spring Boot 內嵌診斷介面 Actuator 是 Java 雲原生時代最高頻
+  的『配置即淪陷』面。Spring Boot 1.x 時代 /heapdump 預設無認證開放(2017
+  後收緊為僅 /health /info,但開發/測試環境的『先開著方便排錯』配置常被
+  原帶上線)。Wiz 統計:暴露在公網的 Actuator 實例中 2.3% 的 heapdump 無
+  認證可直接下載。端點殺傷階梯:(1)/env /configprops——配置源全覽,含
+  DB 連線字串、API key、服務註冊中心地址;(2)/heapdump——JVM 堆快照,
+  strings+grep 即可撈 AWS AKIA key、eyJ 開頭的 JWT、Cookie 會話(合法使用者
+  token 直接餵給攻擊者);(3)/jolokia 或 /gateway/routes+refresh 組合——
+  經典 chain:改 logback 配置載入遠端 XML / Spring Cloud Gateway SpEL
+  注入 → pre-auth RCE;(4)/mappings /beans /conditions——內部路由與組件
+  地圖,供後續精準打擊。與一般掃描不同,Actuator 常掛在應用的非根路徑或
+  管理埠(8081/actuator 反代路徑),需要與主站不同的路徑假設。本劇本純被動:
+  GET 只讀端點判存在,heapdump 嚴禁下載(檔案可達 GB 級=資源轟炸+大量
+  secret 落地),僅以 Content-Length/Content-Type 作證據。
+
+steps:
+  - recon: "Java 指紋先行:響應頭(X-Application-Context、老版 Boot 洩版本)、錯誤頁 Whitelabel Error Page 字樣。命中才進 Actuator 盤點;前綴輪轉:/actuator、/、/manage、/management、/admin(反代改寫常見)。"
+  - probe: "發現端點清單(單 GET):GET /actuator 回 JSON _links 清單=全開;逐一 GET /actuator/{health,info,env,beans,mappings,configprops,heapdump,loggers,threaddump}——全部只讀 GET,health 的 status/db 子欄位常直接洩內部主機名。env/configprops 200 即 High;heapdump 存在性以 HEAD 或 GET+立關連線取 Content-Type/Length 判定,嚴禁完整下載落盤。"
+  - probe: "治理面盤點(存在性而已):/jolokia/list(200=JMX 橋開放,RCE 鏈前置,直接 High)、Spring Cloud:/actuator/gateway/routes(路由表)、/actuator/refresh(配置重載鉤)、/actuator/busrefresh。這些 POST 端點嚴禁任何寫入測試(改配置=真實操縱生產狀態);僅記錄『開放且無認證』事實。"
+  - note: "報告敘事與修復:heapdump 無認證=Critical(視同憑證全洩:輪換堆內出現過的一切憑證+審查 JWT 會話);env/configprops 暴露=High;jolokia/gateway 開放=Critical(RCE 鏈前置,即使未驗證也要最高級呈現)。修復:management.endpoints.web.exposure.include 白名單(僅 health,info)、管理埠綁 127.0.0.1 或獨立內網埠+認證(Spring Security 對 /actuator/** filter)、jolokia 生產移除、gateway 端點預設關。"
+  - note: "被動證據紀律:heapdump/threaddump 屬『存在即高危』型,報告以端點 URL+HTTP 狀態+Content-Type+Content-Length 作證據鏈,嚴禁把任何從中摘出的 secret 寫入報告(發現即輪換,不展示)。"
+  - reference: "來源:Wiz《Exploring Spring Boot Actuator Misconfigurations》(2.3% heapdump 無認證統計、AKIA/eyJ strings 撈取手法、gateway RCE 鏈)、Spring Boot 官方 Production Ready Endpoints 文件(1.x→2.x 預設收緊史)、OWASP WSTG 4.04.06;CVE 家族:Spring Cloud Gateway CVE-2022-22947(SpEL RCE via gateway route)。"

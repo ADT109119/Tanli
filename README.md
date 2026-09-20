@@ -51,6 +51,7 @@ Red teaming is that same dive: the truly critical vulnerabilities hide in the de
 - **Multi-step autonomous execution**: DAG planner + ReAct execution loop; the attack surface is routed automatically by target type
 - **Scanner automation**: nuclei / sqlmap / OWASP ZAP run fully autonomously inside Docker sandboxes; results are converted into findings automatically
 - **LLM attack playbooks**: eleven OWASP GenAI playbooks covering direct jailbreak, multi-turn escalation (Crescendo/Many-shot/Skeleton Key), persona virtualization, encoding obfuscation (Base64/cipher/low-resource/ASCII-art), indirect-injection weaponization (zero-click exfil/confused deputy/memory poisoning), reasoning-model attacks (Bad Likert Judge/Echo Chamber) and multimodal injection — baseline control + sentinel markers + deterministic rules + an LLM-judge second pass for false-positive filtering
+- **Framework exposure playbooks**: twenty-five web methodology playbooks — SQLi/XSS/SSRF/SSTI/CSRF/BOLA full-spectrum plus the CMS/framework misconfiguration family: WordPress config backups & xmlrpc amplification, Laravel `.env` / Django DEBUG / phpinfo probes, Spring Boot Actuator `/heapdump`, exposed `.git` & SourceMaps — all passive, evidence-only (endpoint + status + hash; leaked secrets are never downloaded or quoted)
 - **Automatic CVSS v3.1 scoring**: the official formula embedded (zero deviation from the authoritative library across all 2,592 vectors), with severity/category → vector mapping
 - **Human review gate**: every High/Critical finding is flagged "awaiting human confirmation"; the CLI warns explicitly until the report is finalized, so drafts never get published as official reports
 - **Signed authorization model**: localhost-only by default; widening scope requires an Ed25519 JWS-signed credential plus mandatory Scope Statement validation — crossing the line aborts the run
@@ -191,7 +192,7 @@ tanli self-test           # lab end-to-end smoke, all-PASS required
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / eleven attack playbooks (5 execution + 6 jailbreak-methodology) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 191 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / thirty-six attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 25 web methodology incl. the framework/CMS exposure family) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 192 tests green.
 
 ## License
 

@@ -1,0 +1,29 @@
+id: web-028
+name: "框架調試模式與配置洩漏:Laravel .env/APP_DEBUG、Django DEBUG、phpinfo"
+owasp: A02 (OWASP Top10 2025 Security Misconfiguration) + A01
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉 + 框架官方安全文件:現代框架的『開發模式』與『配置檔』是
+  mass scanner 的頭號獵物,因為一次 200 就直接交付整站鑰匙。三族:
+  (1)Laravel .env——部署時把專案根直接放 web root、或 nginx 未擋點檔,
+  /拉取 .env 即得 DB_HOST/DB_PASSWORD/APP_KEY(加密金鑰)/第三方 API
+  secret/郵件密碼;APP_DEBUG=true 時任意 500 頁回 Ignition 調試頁,含堆疊、
+  環境變數、原始碼片段,甚至附『copy vendor snippet』一鍵執行入口。
+  (2)Django DEBUG=True——500 頁 TECHNICAL 畫面直接印 settings 子集與
+  sql 語句;ALLOWED_HOSTS='*' 另開 Host header 投毒面(快取汙毒/密碼重置
+  host 替換)。(3)phpinfo()/info.php/探針檔——php -i 彙整絕對路徑、
+  php.ini 路徑、載入模組、環境變數,是後續攻擊的地圖。共同本質:
+  『錯誤處理與診斷功能把內部狀態當介面暴露』。本劇本全部被動:以特徵
+  狀態碼/指紋頁判存在,得 200 亦不得摘錄任何 secret 值進報告。
+
+steps:
+  - probe: "Laravel 指紋(零侵入):異常頁特徵(laravel 錯誤頁指紋、_ignition/health-check 端點存在性、Session cookie 名 laravel_session/XSRF-TOKEN、419 頁面)。指紋命中才進入 .env 盤點,避免無意義掃描。"
+  - probe: ".env 暴露盤點(只判存在):GET /.env ——200+text/plain+特定長度即 High finding。紀律:即使 200 嚴禁把檔案內容(含任何 key=value)寫進報告或工作區,證據僅存 URL+狀態碼+位元組數+SHA256;報告立即標記『需即刻輪換全部憑證+重生成 APP_KEY』。同族盤點:/.env.example(無 secret 可參考)、/storage/logs/laravel.log(可能含 token)。"
+  - probe: "調試模式被動確認(不製造 500):對既有公讀頁觀察響應頭(X-Web-Stack/框架指紋);對已自然發生的錯誤頁(404 自訂頁缺失)判讀是否回 TECHNICAL/Ignition/Whoops 畫面。嚴禁刻意送畸形參數製造 500(屬主動觸發,超出唯讀紅線);以『站內已可見的調試畫面』作證據。"
+  - probe: "php 探針與配置殘件:GET /phpinfo.php /info.php /test.php /php_info.php /probe.php 候選清單,phpinfo 頁特徵('PHP Version'表頭+configuration 表)命中即 High(洩絕對路徑/模組/環境)。同族:.htaccess(403 為正常,200+原文為異常)、.git/config、composer.json(無 secret,Low)、backup.{zip,tar.gz,sql} 檔名輪轉(只 HEAD 判存在)。"
+  - note: "報告敘事與修復:.env 外洩/heapdump 級同 Critical——『配置即憑證』,輪換才算修復、刪檔只是止血;APP_DEBUG/DEBUG=True=High(生產必 false,.env 設 force 覆蓋);phpinfo=High(刪檔+部署管線黑名單);ALLOWED_HOSTS='*'=Medium(Host header 投毒面,白名單化)。部署建議:.env 永不進 web root、.gitignore 管理、部署用 rsync --exclude、CI 掃描規則把 .env/DEBUG 列為阻斷項。"
+  - reference: "來源:Laravel 官方文件《Configuration Caching/Debugging》與 APP_KEY 輪換指引、Django 官方《Deployment checklist》(DEBUG=False、ALLOWED_HOSTS)、StackShield/Invicti 公開掃描實踐(APP_DEBUG exposure 為掃帚常客)、phpinfo 硬加固建議(production 刪探針)。OWASP WSTG 4.04.06 Error Handling / 4.04.03 Sensitive Data in Frontend。"

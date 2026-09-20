@@ -1,0 +1,32 @@
+id: web-027
+name: "WordPress 暴露面族:wp-config 備份洩漏、debug.log、xmlrpc 放大與版本指紋"
+owasp: A02 (OWASP Top10 2025 Security Misconfiguration;原 A05:2021)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉 + WPScan 官方知識:WordPress 是全球市佔最高的 CMS,掃描器
+  (mass scanner)對任何 IP 段預設就試一套 WordPress 路徑,因此『被掃到 WordPress
+  路徑請求』本身不代表被針對,但也意味著任何暴露面都會在數日內被自動化撿走。
+  五大暴露面:(1)wp-config.php 備份族——編輯器/管理員手動備份產生
+  wp-config.php.bak/.save/.old/.txt、vim swap(.wp-config.php.swp)、
+  編輯器波浪尾綴(wp-config.php~),內容含 DB 帳號密碼、salt key、table
+  prefix,外洩即等同整站資料庫淪陷(最高嚴重度)。(2)wp-content/debug.log——
+  WP_DEBUG 未關時錯誤寫入公讀目錄,常洩 SQL 語句、絕對路徑、臨時 token。
+  (3)xmlrpc.php——單一 POST 可 multicall 數百次登入嘗試(暴破放大)且 pingback
+  可被用作反射放大 DoS 源;存在性本身就是攻擊面清單。(4)wp-json/wp/v2/users
+  與 author 架構——未設限即可列舉全部使用者名稱(暴破的帳號字典)。(5)版本指紋
+  ——readme.html/license.txt 標題直接寫版本、generator meta、資產 ver= 參數,
+  讓攻擊者秒對 CVE 清單。本劇本全部被動探測:只記狀態碼/長度/雜湊作證據,
+  嚴禁下載或記錄外洩檔內容,嚴禁任何 xmlrpc 施壓。
+
+steps:
+  - recon: "版本指紋(零侵入):GET /readme.html 與 /license.txt(標題含版本字串)、HTML generator meta 標籤、/wp-json/ 核心命名空間存在性、靜態資產 ?ver= 參數。版本+外掛清單(wp-content/plugins/<slug>/readme.txt)組合出 CVE 候選集,交 CVE 情報層比對。"
+  - probe: "wp-config 備份族盤點:對 /wp-config.php.<後綴> 候選清單(.bak .save .old .orig .txt .swp .1 ~)發 GET,只判讀 200/403/404 與 Content-Type;200+text/plain 即高危 finding。關鍵紀律:即使 200 也不得擷取/落地檔案內容,證據僅存 URL+狀態碼+位元組數+雜湊,並立即在報告標記『需即刻輪換 DB 密碼與 salt key』。"
+  - probe: "debug.log 與建置殘件:GET /wp-content/debug.log(判 200+大小)、/wp-content/uploads/ 目錄索引開啟與否、/wp-content/upgrade/ 殘留。uploads 目錄可執行 PHP 是 webshell 落點,以『目錄索引+歷史異常檔名』作暴露面證據,不植入任何檔案。"
+  - probe: "xmlrpc.php 存在性(單次 GET):GET /xmlrpc.php 預期 400+『XML-RPC server accepts POST requests only』即確認存在,記錄之;嚴禁 POST system.multicall(暴破放大)與 pingback 驗證(反射放大,且需要外部接收伺服器——任何情況下禁止)。報告措辭:『xmlrpc 啟用且無 WAF 攔阻——暴破放大與 DDoS 源暴露面』。"
+  - probe: "使用者列舉(小規模):GET /wp-json/wp/v2/users?per_page=1(只取第一筆驗證開放性,不翻全量)與 /?author=1 301 跳轉目標。可得 1-2 個帳號作『暴破字典暴露』證據即止,嚴禁窮舉全部使用者。"
+  - note: "報告敘事與修復:wp-config 備份外洩=Critical(立即輪換憑證);debug.log=High;xmlrpc 開放+無防護=Medium(建議 add_filter('__return_false') 停用或 WAF 規則);users 列舉=Low-Medium(過濾 rest_endpoints / 限權);readme/license=Low(nginx location 擋擋或移除)。被掃 WordPress 路徑屬互聯網背景輻射,建議操作者以 WAF 虛擬修補+移除備份檔為第一優先。"
+  - reference: "來源:WPScan 官方《WordPress Configuration File Backups》(wpscan --url -e cb 偵測 config 備份)、wpscan -e u/v/ap 列舉族;xmlrpc multicall 暴破放大與 pingback amplification 為業界公開記錄的攻擊向量(REFCON 反射放大文獻);OWASP WSTG 4.04.06。修復:刪備份、WP_DEBUG off 且 log 移出公讀根、停用 xmlrpc、rest api 限權、擋 readme.html/license.txt、定期 wpscan 自掃。"
