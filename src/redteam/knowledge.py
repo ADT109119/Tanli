@@ -141,7 +141,11 @@ def load_library(dirs: tuple[str, ...] = ("playbooks/llm", "playbooks/web")) -> 
 
 def search(lib: list[PlaybookDoc], *, query: str | None = None,
            owasp: str | None = None, target_type: str | None = None) -> list[PlaybookDoc]:
-    """關鍵字/類別過濾(id、name、owasp、summary、steps 皆納入比對)。"""
+    """關鍵字/類別過濾(id、name、owasp、summary、steps 皆納入比對)。
+
+    帶 query 時按相關性排序:name/id 命中優先於 summary/steps 命中,
+    避免庫擴大後精準劇本被泛提及者擠出(agent get_playbook 只回前 4)。
+    """
     out = lib
     if target_type:
         t = target_type.lower()
@@ -151,13 +155,20 @@ def search(lib: list[PlaybookDoc], *, query: str | None = None,
         out = [d for d in out if o in d.owasp.lower()]
     if query:
         q = query.lower()
+        words = re.findall(r"\w+", q)
+
         def hit(d: PlaybookDoc) -> bool:
             blob = " ".join([d.id, d.name, d.owasp, d.summary] +
                             [f"{s.get('kind','')} {s.get('name','')} {s.get('detail','')}"
                              for s in d.steps]).lower()
             # 多詞查詢:全部詞都要命中
-            return all(w in blob for w in re.findall(r"\w+", q))
-        out = [d for d in out if hit(d)]
+            return all(w in blob for w in words)
+
+        def score(d: PlaybookDoc) -> int:
+            head = f"{d.id} {d.name} {d.owasp}".lower()
+            return sum(2 if all(w in head for w in words) else 1 for w in words)
+
+        out = sorted((d for d in out if hit(d)), key=score, reverse=True)
     return out
 
 

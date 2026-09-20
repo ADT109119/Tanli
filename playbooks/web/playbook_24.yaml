@@ -1,0 +1,29 @@
+id: web-024
+name: "CSRF 環境權限濫用:Ambient Authority 決策鏈斷裂與modern 繞過"
+owasp: A01 (跨站請求偽造;2025 架構下屬存取控制/識別認證交界)
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉。CSRF 與 XSS 互為鏡像:XSS 濫用『使用者對伺服器的信任』,
+  CSRF 濫用『伺服器對瀏覽器環境憑證的盲目信任』。根因:HTTP 的環境權限
+  (Ambient Authority)設計——瀏覽器對特定網域自動附隨 Cookie/HTTP Basic 認證,
+  伺服器若只驗『Cookie 有無與有效性』而不驗『意圖證明』,evil.com 的隱藏表單
+  提交就會以受害者身分完成未授權交易(轉帳/改信箱/刪帳號)。
+  防禦即打破單一決策鏈:(1)SameSite=Lax/Strict 禁跨站自動攜帶 Cookie(瀏覽器原生);
+  (2)同步權杖模式 Synchronizer Token——高熵 CSRF Token 嵌入表單/自訂標頭,
+  SOP 讓第三方讀不到 => 偽造請求被拒。
+  現代殘存面(文件未展開,實務補充):JWT-in-Authorization 架構『理論上免疫』CSRF
+  (瀏覽器不自動附帶),但『token 存 localStorage 且任何輸入可觸發 fetch』=>
+  一個 XSS 就釀成 CSRF 等值的行動劫持;GET 型副作用端點(改變狀態的 GET)是
+  設計級 CSRF 自殺;CORS 配置錯誤(反射 Origin + credentials)是『自製 CSRF』。
+
+steps:
+  - recon: "狀態變更端點清單(被動):從前端 JS 找 POST/PUT/DELETE 呼叫——哪些帶 CSRF token 欄位?哪些只靠 cookie(無 token)?GET 請求中是否有改變狀態者(線索:確認連結帶 ?action=delete 之類)。"
+  - probe: "防護存在性檢查(零副作用):對狀態變更端點送『移除 CSRF token 欄位』的重放請求(讀取類)或觀察 403 特徵——缺 token 仍被受理(在自有帳號範圍內)= 防護缺失證據。嚴禁對任何非自有帳號做實際表單偽造。"
+  - probe: "SameSite/CORS 配置盤點(被動):Set-Cookie 有無 SameSite 屬性(Lax/Strict/None+Secure);Access-Control-Allow-Origin 是否反射任意 Origin 且 Allow-Credentials: true(= 跨站讀取 + 憑證附隨,比 CSRF 更糟的直接資料外洩面)。兩項都是純標頭審查,零投遞。"
+  - verify: "完整 POC 僅在自有雙帳號+自有誘導頁(本地靶場)重現:受害者帳號(自有)訪本地偽造頁 -> 觀察狀態變更成功。證據=請求封包+狀態前後對照,禁止使用真實網域承載誘導頁。"
+  - note: "報告要點:CSRF 的價值由『可偽造的動作』決定——改密碼/改信箱/綁定社交帳號(帳號接管鏈) >> 點讚/加購物車。敘述公式:『在[瀏覽器/認證模型]條件下,誘使[已登入受害者]觸發[端點]即可完成[動作],無需用戶任何輸入』。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(CSRF 段:環境權限+SameSite+同步權杖),OWASP CSRF Prevention Cheat Sheet;補充實務面:CSRF 與 CORS 錯配(OWASP API Top10 A3 視角)、JWT 架構的隱性 CSRF。修復:SameSite+CSRF token 雙層、狀態變更拒絕 GET、敏感操作再認證(意圖證明)。"

@@ -48,3 +48,27 @@ def test_bola_family_playbooks():
     rendered = d.render()
     assert "OWASP API" in rendered and "Open Relay" in rendered
     assert not d.executable  # 鐵律:利用步驟僅方法論,不直接執行
+
+
+def test_operator_doc_playbooks():
+    """操作者文件《現代 Web 攻擊底層邏輯》提煉的六本(21-26)+web-006 升級入庫可查。"""
+    lib = load_library()
+    for q, tid in [("SSRF", "web-021"), ("IMDS", "web-021"), ("SSTI", "web-022"),
+                   ("Slowloris", "web-026"), ("憑證填充", "web-026"),
+                   ("Fail-Open", "web-025"), ("Ambient", "web-024")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    # 文件出處標注
+    d21 = get_by_id(lib, "web-021")
+    assert d21 is not None and "Common_Web_Attack_Techniques" in d21.render()
+    # 全部非執行型(方法論)
+    for n in range(21, 27):
+        d = get_by_id(lib, f"web-{n:03d}")
+        assert d is not None and not d.executable, f"web-{n:03d} 必須是方法論劇本"
+    # web-006 升級後六步驟與探測細節保留(向後相容)
+    d6 = get_by_id(lib, "web-006")
+    assert d6 is not None
+    kinds = [s["name"] for s in d6.steps]
+    for step in ("recon", "fingerprint", "probe", "automate", "verify", "poc"):
+        assert step in kinds
+    assert "參數化查詢" in d6.render()  # 升級:架構級修復原理入庫

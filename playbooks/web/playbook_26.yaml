@@ -1,0 +1,29 @@
+id: web-026
+name: "非對稱資源消耗:Slowloris/ReDoS/昂貴端點與憑證填充濫用"
+owasp: A05/A07 交界 + API4 (資源消耗無限制;識別認證濫用)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉(DoS+憑證填充段)。應用層 DoS 的數學本質是『非對稱性』:
+  攻擊者花 1 單位成本,誘發目標消耗 N 個數量級資源。三族:
+  (1)Slowloris 慢速連線——針對 thread-per-connection 模型(Apache prefork),
+  每隔 15 秒送一個無意義自訂標頭(X-keep-alive: 1\r\n)且不發 \r\n\r\n,伺服器必須
+  掛起執行緒維持請求上下文;單機數百條慢速連線即佔滿連線池,極低流量癱瘓全站。
+  (2)運算複雜度——高成本端點(多表報表、ReDoS 級正則、bcrypt 高 cost 登入、
+  影片轉碼)被併發轟炸,1 個 API 呼叫 = 後端 1 秒 CPU = 攻擊者 1/10 秒頻寬。
+  (3)憑證填充(Credential Stuffing)——黑市外洩庫+代理池撞登入端點,利用
+  跨平台重複用密碼習慣,低命中率即大規模 ATO;與暴力破解的差別在『分散+低頻+
+  用真實憑證』,傳統帳號鎖定防線對其無效。
+  本劇本定位:全部採『暴露面盤點』而非施壓驗證——DoS 施壓對生產站屬真實傷害,
+  任何情況下禁止;報告以『缺乏防護的證據』立 finding。
+
+steps:
+  - recon: "伺服器模型指紋(被動):Server 標頭/行為特徵判 prefork vs event 模型(Apache prefork/老式 IIS 為 Slowloris 高危族);邊界有無 event-driven 代理(Nginx/Envoy/CDN 在前方 = Slowloris 攻擊面被稀釋)。"
+  - probe: "限流防護盤點(被動,零施壓):X-RateLimit-* 標頭存在性;對單一端點以正常速率送 3-5 次重複請求觀察 429/Retry-After 有無——注意:這是『探測防線』不是『轟炸』,超過 10 次即屬施壓,禁止。無任何限流證據=API4 finding。"
+  - probe: "昂貴端點識別(靜態分析):從前端 bundle/公開 API 文件找高成本操作清單——全文搜尋、報表匯出、圖片處理、密碼重置(高 cost 雜湊)、AI 推理端點。這些是未來限流/降級策略的清單,報告中列為『需加固面』而非漏洞。"
+  - probe: "登入端點防護盤點(零撞庫):觀察登入失敗回應——有無帳號鎖定線索(423/鎖定訊息)、MFA 是否可被跳過(回應結構差異)、有無外洩密碼庫比對跡象(常見提示:『此密碼出現在資料外洩事件中』)。嚴禁使用任何真實外洩憑證組合測試(屬真實 ATO 嘗試,任何 RoE 都不放行)。"
+  - note: "報告敘事:此族 finding 全部以『防護缺失』措辭——『登入端點無速率限制與鎖定機制(憑證填充暴露面)』『高成本匯出端點無配額』。DoS 施壓驗證(哪怕『就試一下』)在任何生產目標上都是紅線,寫進 RoE 禁止清單。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(Slowloris/運算 DoS/憑證填充段),OWASP API Top10 2023 API4、OWASP WSTG 4.15;修復:邊界 event-driven 代理+client_header_timeout、token bucket 限流+昂貴操作非同步佇列、MFA+洩密庫阻斷+FIDO2/WebAuthn 去密碼化。"

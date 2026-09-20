@@ -1,0 +1,30 @@
+id: web-021
+name: "SSRF 伺服端請求偽造:內部邊界穿透與雲端中繼資料竊取"
+owasp: A01 (OWASP Top10 2025 已將 SSRF 併入存取控制失效;原 A10:2021)
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者提供文件《現代 Web 攻擊底層邏輯》(2026)提煉,對應 OWASP Top 10:2025
+  新架構——SSRF 正式歸入 A01 存取控制失效,因為其本質是「伺服器邊界授權管制失控」:
+  伺服器具備存取內部隔離網路的網路特權,卻讓外部非受信使用者決定連線目標。
+  三階段攻擊鏈:(1)參數控制與逃逸——凡接受 URL/位址的入口(webhook、圖片預覽、
+  URL 匯入、檔案抓取、SAML/OIDC 端點自動探索)皆可改填內部迴路 127.0.0.1 或私有網段
+  10.0.0.0/8、192.168.0.0/16;(2)網路邊界跨越——邊界伺服器受內部防火牆信任,
+  代理穿透 NAT 直達內部微服務、未驗證 Redis/資料庫;(3)雲端中繼資料竊取——
+  請求 169.254.169.254 讀 IMDSv1 掛載的 IAM 臨時金鑰,一發奪取雲端控制權。
+  防禦關鍵(文件重點):黑名單極易被 DNS Rebinding 繞過——攻擊者 DNS 首解析回
+  合法外部 IP 過校驗,TTL 歸零後第二次解析指向 127.0.0.1;健全防禦是
+  「解析後驗證(Resolve-then-Connect)」:解析後立即檢驗實體 IP 非 RFC1918/鏈路本地,
+  並鎖定該 IP 建連。雲端端強制 IMDSv2(PUT 換 token + 自訂標頭,GET 型 SSRF
+  無法自訂標頭 => 架構級免疫)。
+
+steps:
+  - recon: "URL 接受面清單(唯讀):找所有『伺服器會替你去抓東西』的入口——webhook 設定、圖片/影片 URL 預覽、CSV/XML 匯入、PDF 渲染外部資源、SAML metadata URL、第三風登入自動探索(well-known)。每個入口都是內部網路代理候選。"
+  - probe: "OOB 先驗(安全做法):以 allowed_out_of_band 白名單內的自建 collabrorator 域名做單次帶外驗證,觀察伺服器是否真的發起外連(延遲/DNS 查詢)。這是 SSRF 存在性的零副作用證據,不碰任何內部地址。"
+  - probe: "內部面被動推斷(不投遞):觀察回應差異特徵——對 URL 參數送非法 scheme(file://、gopher://、dict://)的錯誤訊息措辭差異可推斷校驗層(黑名單/白名單/無校驗);時間差異(內網 IP vs 外網 IP 的回應延遲)屬灰色地帶,read-only RoE 下預設禁止,須授權放行。"
+  - probe: "雲端環境判定(指紋而非利用):部署環境線索(API 回應的 AWS region 字串、CORS 標頭、錯誤頁 X-Powered-By)推斷是否雲端託管;若目標為雲端執行個體,IMDSv1 暴露為 critical 理論 finding,以『建議站方自查 IMDSv2 狀態』記錄,嚴禁實際請求 metadata 路徑(取得 IAM token 即屬真實入侵)。"
+  - note: "RoE 分級(本劇本鐵律):OOB 外連自證=允許(白名單域);對內部地址的探測=必須書面放行;讀取 IMDS 憑證/內部服務資料=禁止,發現暴露面即 deconfliction 上報。SSRF 是『打穿內網』破口,誤用即事故。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(SSRF 三階段表 + DNS Rebinding/IMDSv2 原理),OWASP Top10:2025 A01;延伸:PortSwigger SSRF 章節、Strobes/Lorikeet SSRF 技術文(文件引用 12-17)。修復:域名白名單、egress proxy+ACL、resolve-then-connect、IMDSv2、禁用非 HTTP scheme。"

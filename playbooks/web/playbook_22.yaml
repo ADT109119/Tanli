@@ -1,0 +1,24 @@
+id: web-022
+name: "SSTI 伺服端範本注入:從語意逃逸到物件反射 RCE"
+owasp: A05 (OWASP Top10 2025 Injection)
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉:注入家族的「高階抽象版」。SQLi 逃的是字串常量,Command Injection
+  逃的是 shell 分隔符,SSTI 逃的是「範本語言的表達式語意」——當外部輸入被直接拼入
+  Jinja2/Twig/Velocity/Freemarker/Thymeleaf 範本引擎解析,輸入即被當作原生巨集求值。
+  殺傷力躍升:Python Jinja2 沿 __class__.__mro__ 遍歷基底類別、在記憶體全域命名空間
+  定位 os.popen/subprocess;Java 直達 ProcessBuilder——範本表達式 = 反射鏈 = RCE。
+  探測判別特徵:輸入 {{7*7}}/${7*7}/#{7*7}/*{7*7} 若回應出現 49,即範本引擎在求值
+  你的輸入(先聲測試,非攻擊)。常見於:郵件範本(行銷系統)、錯誤訊息客製、
+  報表/文件產生器、多語言模板、自訂通知範本——「讓管理員自己寫範本」的功能全滅區。
+
+steps:
+  - recon: "範本面清單:哪些輸入會『出現在渲染結果裡』且可能經過範本引擎——個人資料欄位(暱稱/公司名)、通知/信件內容、錯誤提示客製、報表標題、邀請函。特徵:輸出中你的內容旁邊有範本引擎渲染過的痕跡(日期格式化、變數替換)。"
+  - probe: "引擎指紋(無害先聲):送字面量算術表達式 {{7*7}}、${7*7}、<%= 7*7 %>、#{7*7}、*{7*7} 觀察是否回顯計算結果 49。回顯=範本注入存在;回顯原文=可能僅轉義;空白/500=可能被過濾或觸發例外(A10 聯動線索)。僅算術,嚴禁在此階段送任何反射鏈/RCE payload。"
+  - verify: "確認與停止線(本劇本鐵律):算術求值 49 回顯即為足夠的 finding 證據(CVSS 起點高,因為它證明表達式引擎接受外部輸入)。完整的 __mro__ 反射鏈、os.popen 執行、ProcessBuilder 利用——屬『證明可 RCE』的進階步驟,read-only RoE 下一律禁止,以『存在 SSTI,理論可 RCE』立案。"
+  - note: "引擎→語法對照(報告用):Jinja2 {{ }} / Twig {{ }} / Freemarker ${ } 與 <# > / Velocity ${ } / ERB <%= %> / PHP {{ }}與<?php / Thymeleaf __${...}__。報告中標注偵測到的引擎種類,修復建議才可落地(沙箱/禁 filter/字面值模式)。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(SSTI 反射鏈段落),OWASP Top10:2025 A05;PortSwigger Server-side template injection 章節、PayloadsAllTheThings SSTI。修復:輸入永不進範本字串(資料綁定而非拼接)、範本引擎沙箱化、禁用反射 filter、最小權限執行。"

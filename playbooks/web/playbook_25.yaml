@@ -1,0 +1,27 @@
+id: web-025
+name: "A10:2025 特殊情況處理不當:Fail-Open、錯誤洩漏與交易狀態崩潰"
+owasp: A10 (OWASP Top10 2025 全新類別,含 24 個 CWE)
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者文件提煉:OWASP Top 10:2025 增設的全新類別,直指「系統在極限壓力與
+  異常狀態下的防禦崩潰」。核心缺陷:程式面對例外時未能 Fail-Secure,反而
+  Fail-Open。三族:(1)開啟失敗邏輯旁路——授權驗證/Token 解析/MFA 檢驗的
+  try-catch 若在外層吞掉異常(驗證服務逾時、Redis 連線失敗、NullPointer)
+  並跳出校驗段落預設放行,未授權請求意外取得管理特權;(2)機敏除錯資訊洩漏
+  ——HTTP 500 直接渲染 stack trace/DB 連線字串/框架版本/SQL 語句至前端,
+  為攻擊者繪製精確架構拓撲圖(資訊洩漏類,唯讀安全可查);(3)分散式交易狀態
+  崩潰——多階段流程(扣款/折價券核銷/庫存劃撥)在中途網路中斷時缺乏
+  Rollback/補償交易,攻擊者刻意觸發重置實現零元購或餘額套利。
+  此類別的探測哲學與他處不同:別人測『正常輸入的邊界』,本劇本測『異常輸入的
+  處理品質』——壞輸入不是為了注入,是為了看系統摔倒時的樣子。
+
+steps:
+  - probe: "錯誤面盤點(被動,零副作用):對各端點送『結構性壞輸入』——截斷 JSON、多餘逗號、類型錯置(id 傳字串/陣列)、超長值(10^5 字元)、null 與空白。觀察 500 vs 400 的差異與錯誤體內容。500 且回顯框架名/堆疊 = verbose error leakage finding(CVSS 中低但修復成本極低,報告必列)。"
+  - probe: "驗證鏈韌性(理論盤點):MFA/驗證碼/簽章校驗的失敗路徑——送『格式正確但值無效』的 token(過期簽章、alg 錯位)與『完全缺失』的 token,比較 401/403 措辭差異;若『解析拋例外』與『校驗不通過』回應不同,推論 catch 區塊位置。嚴禁實際利用 fail-open 取得特權(那需製造服務降載,屬 DoS+入侵複合,禁止)。"
+  - probe: "交易一致性(自有帳號、單次):多步流程(下單→折價→付款)以『中途放棄』方式觀察殘留狀態——訂單未付款是否佔庫存?折價券是否被鎖死?半完成狀態可重複觸發=資源鎖定面。零元購類利用(回滾濫用/餘額套利)為真實財務損害,read-only RoE 下禁止,僅以『狀態機缺乏原子性』理論面記錄。"
+  - note: "報告公式:fail-open 線索寫『[驗證環節]在[異常條件]下回應特徵顯示校驗被跳過(證據:401 措辭差異/例外處理特徵)』——理論發現標注 pending-approval;錯誤洩漏直接附 500 回應截圖;交易崩潰寫狀態機圖+觀察到的中間態。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(A10 三族段),OWASP Top10:2025 A10 Mishandling of Exceptional Conditions(24 CWE);Qualys 2025 變遷分析(文件引用 4)。修復:全域錯誤遮罩(對外泛化/對內審計日誌)、驗證鏈 deny-on-exception(fail-secure)、交易 Saga/補償機制與冪等鍵。"

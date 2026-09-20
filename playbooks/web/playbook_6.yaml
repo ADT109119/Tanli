@@ -1,12 +1,29 @@
 id: web-006
-name: SQLi Auth Bypass / Data Extraction
+name: "SQLi 全譜:語法邊界坍塌、盲注推斷與 OOB 通道(方法論)"
+owasp: A05 (OWASP Top10 2025 Injection)
 target_type: web_service
 phase: inject
-steps:
-  - recon: "Enumerate endpoints, login forms, params"
-  - fingerprint: "Identify DB from error markers"
-  - probe: ["' OR 1=1--", "1=1/1=2 boolean", "time-based sleep"]
-  - automate: "sqlmap --batch (captured request)"
-  - verify: "Confirm auth bypass / extraction, repeat once"
-  - poc: "Record raw request + dumped content"
+payload_policy: methodology-only
 side_effect_free: false
+
+summary: >
+  注入攻擊的底層原理(操作者文件提煉):直譯器在 AST 生成階段無法區分
+  『開發者預定義指令』與『外部純文字資料』——未參數化的字串拼接讓輸入中的
+  引號提前截斷字串常量範圍,後附布林運算子被解析為新語法節點。
+  三大族:(1)帶內(In-band):UNION 注入先探欄位數與相容型態,再把
+  information_schema/敏感表查詢結果合併進原始回應通道;(2)推斷盲注:布林盲注以
+  永真式/永假式(' AND 1=1-- / ' AND 1=2--)的回應差異逐位元組還原;時間盲注以
+  pg_sleep()/WAITFOR DELAY 阻塞時長推導真偽;(3)進階:堆疊查詢(; 接新語句)在
+  多語句驅動下可 INTO OUTFILE 寫 webshell 或 xp_cmdshell 拿 OS shell——
+  從資料洩漏躍升為接管。唯一架構級解法:參數化查詢(編譯與填值分離,
+  參數永不進語法解析)。自動化(sqlmap)保留,但本劇本強調其產出僅為 CANDIDATE,
+  須人工證據鏈覆核。
+
+steps:
+  - recon: "枚舉輸入面:端點、登入表單、查詢參數、表單欄位、Cookie 值、HTTP 標頭(Referer/X-Forwarded-For 常被拼進日誌 SQL)。"
+  - fingerprint: "DB 指紋:錯誤標記(ORA-/MySQL 語法提示/PostgreSQL 引號措辭/MSSQL 分行風格)判定引擎,決定後續語法方言(-- 與 # 與 /* */ 註釋變體、字串串接函數)。"
+  - probe: "探測序列:' OR 1=1-- 永真式基線、1=1/1=2 布林對照、time-based sleep 單發延遲——三發內定性;全部使用 benign 邏輯式,嚴禁 UNION SELECT 真實敏感表、嚴禁 INTO OUTFILE/xp_cmdshell 任何變體(寫入/接管類在 read-only RoE 物理封鎖)。"
+  - automate: "sqlmap --batch(以擷取的請求檔為輸入)僅用於『驗證存在性與覆蓋面』,產出全部標注 CANDIDATE——自報的注入點與資料擷取需人工覆核證據鏈(回應差異截圖/延遲分佈),patch 說已挖到 ≠ 已挖到。"
+  - verify: "確認:auth bypass 或資料提取證據成立後重複一次即停(探測預算紀律);記錄盲注逐位還原的樣本(前 8 字元)作為證據,不整庫拖取。"
+  - poc: "POC 記錄:原始請求+回應差異對照(永真 vs 永假)+時間測量;OOB 變體(僅限 allowed_out_of_band 白名單域:load_file/mirror DNS 通道)單發驗證即停。"
+  - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(SQLi 三族+AST 原理+參數化查詢段)。修復鐵律:參數化查詢/Prepared Statements、ORM 綁定、DB 帳號最小權限(禁 FILE/EXECUTE 權限)、自寫動態 SQL 需白名單欄位映射。"
