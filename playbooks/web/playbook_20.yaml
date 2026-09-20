@@ -1,0 +1,25 @@
+id: web-020
+name: "泛 BOLA/IDOR 授權破口盤點:物件層與功能層授權矩陣失效"
+owasp: API1/API3/API5 (OWASP API Top10 2023) + A01
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  web-019(發信中繼站)的泛化版:BOLA(Broken Object Level Authorization)/IDOR
+  (Insecure Direct Object Reference)是 OWASP API Top 10 連兩屆榜首,核心只有一句話
+  ——"伺服器信任了客戶端送來的 ID"。三個變體族:(1)物件層:改 ID 讀/改別人資源
+  (/api/order/123 → 124);(2)功能層:一般用戶直呼管理端點(/api/admin/users),
+  前端藏選單≠後端驗角色;(3)參數態變體:HTTP 方法改寫(GET /api/user 無效 →
+  PUT/DELETE/PATCH 同 URL 繞過路由級檢查)、欄位級洩漏(列表回傳含他人 email/phone)。
+  政府/醫療/電商等「多租戶+大量用戶 ID」系統為高危族,因 ID 常為遞增數字或可枚舉。
+
+steps:
+  - recon: "API 面繪製(唯讀):從 JS bundle/公開文件/移動端流量抓端點清單,標注每個端點的 ID 型參數(userId/orderId/reportId)與 ID 格式(遞增=可枚舉、UUIDv4=難枚舉、短代號/手機=半可枚舉)。"
+  - probe: "授權矩陣假設(防守面思考):合法情況下誰能訪問什麼?找『讀取類』端點做最小探測:不帶憑證呼一次(測功能層)、帶 A 憑證但 ID 填自己(基線 200 特徵)——兩者的 401/403/200 差異就是授權邊界地圖。任何對『他人 ID』的實際讀取在唯讀 RoE 下禁止,僅以『他人 ID 是否回 403 還是 500/200 結構差異』做被動推斷。"
+  - probe: "方法/路由變體(觀察型):同 URL 換 HTTP 方法、加 .json/.xml 後綴、復數/單數路徑變體(/api/users/1 vs /api/user/1)、GraphQL introspection(若開放)尋找未掛授權的 resolver。"
+  - probe: "欄位級洩漏(回應體審查):列表/詳情端點的回應 JSON 是否多回不該給的欄位(email/phone/idCard/內部 status)。這是『被動就能完成』的 finding,零副作用。"
+  - verify: "確認性測試僅在自有雙帳號環境執行:A 讀 B 的資源成功=finding 成立;或向站方申請授權的滲透範圍放行單次跨帳號讀取(寫入類一律禁止)。證據=兩組封包對照+回應差異。"
+  - note: "報告敘事公式:『攻擊者以[身份]透過[端點]改動[參數]即可[讀/改/觸發][他人資源],影響 N 個用戶/可枚舉面 M』——量化的影響面是 bug bounty 定價關鍵。"
+  - reference: "標準對應:OWASP API Security Top 10 2023 API1(BOLA)/API3(Excessive Data Exposure)/API5(Broken Function Level Authorization);CWE-639、CWE-862 Missing Authorization、CWE-863 Incorrect Authorization;經典研究:PortSwigger Web Security Academy Access Control 章節、API Top 10 專案(OWASP API Security Project)。修復:伺服器端從 session 推導主體、 centrally 授權中間件(deny-by-default)、ID 用不可預測值+仍驗授權(防列舉≠防越權)、回應欄位白名單。"

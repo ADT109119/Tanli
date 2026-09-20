@@ -34,3 +34,17 @@ def test_render_and_source_provenance():
     d = get_by_id(lib, "web-007")
     text = d.render()
     assert "Apache" in text and "PortSwigger" in text
+
+
+def test_bola_family_playbooks():
+    """操作者實務案例(web-019 開放式發信中繼)與泛 BOLA 家族(web-020)入庫可查。"""
+    lib = load_library()
+    for q, tids in [("BOLA", {"web-019", "web-020"}), ("IDOR", {"web-019", "web-020"}),
+                    ("Open Relay", {"web-019"}), ("OTP", {"web-019"})]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tids <= hits, f"查詢 {q} 未命中 {tids}: {hits}"
+    d = get_by_id(lib, "web-019")
+    assert d is not None
+    rendered = d.render()
+    assert "OWASP API" in rendered and "Open Relay" in rendered
+    assert not d.executable  # 鐵律:利用步驟僅方法論,不直接執行

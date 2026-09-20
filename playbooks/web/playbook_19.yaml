@@ -1,0 +1,29 @@
+id: web-019
+name: "開放式訊息中繼站:未驗證發信 API + 收件人 BOLA(Open Notification Relay)"
+owasp: API1/API2/API4 (OWASP API Security Top10 2023) + A01
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  操作者案例提煉(過往專案實測):發信 API 未做身份驗證,且收件人 user_id
+  由客戶端自填,伺服器不驗證寄件人與收件人的關係——任何匿名攻擊者可對任意用戶發送
+  任意內容的訊息。這是 SMTP Open Relay(郵件開放中繼)在 REST API 時代的轉世:
+  發信/通知功能被開發者當「功能」實作,而非「安全邊界」。失守三層:
+  API2 驗證缺失(端點常因 OTP/驗證碼類「需免登入」被整組放進 auth 白名單)
+  + API1 物件層授權缺陷(BOLA/IDOR:收件人參數客戶端可控)
+  + API4 資源消耗無限制(無速率/配額限制)。
+  危害敘述要點:(1)從公司自有網域/發信帳號投遞釣魚——SPF、DKIM、DKIM alignment
+  全部通過,收件人與郵件網關都完全信任,等於公司親手發釣魚信;(2)SMS 通道每則都是
+  公司的錢(SMS bombing/pumping 是近十年 bug bounty 高發類,曾有單點虧損數十萬美元
+  案例);(3)用戶 ID 可枚舉 + 任意轟炸 = 用戶列舉漏洞與品牌信譽雙殺;(4)常被用於
+  進階攻擊鏈:對目標用戶轟炸 OTP 訊息做「通知疲勞」釣魚,或掩蓋其他入侵行為。
+
+steps:
+  - recon: "從前端 JS bundle / mobile app 流量逆向找發信類端點:send_sms、send_otp、send_email、notify、verify_phone、invite_friend、share、contact_us 之類命名。重點線索:該端點的 request 是否出現 token/apiKey 欄位(有=可能聲稱需驗證)、收件人欄位是否為 ID(user_id/member_id/phone/email)且由客戶端填入。"
+  - recon: "驗證聲稱與實際的差距(被動):同一端點拿掉 Authorization header/cookie 再觀察(用OPTIONS或前次 401/200 差異即可,不投遞內容)。常見模式:client 端檢查 token 就擋、server 端其實沒驗;或驗了『有無 token』但 token 是公開 app key(每個 app 用戶都有,等於沒驗)。"
+  - probe: "BOLA 判定(以不發真訊息的方式):對端點送收件人=自己帳號的請求(合法語意)觀察成功回應特徵;比對收件人欄位格式(ID 可預測性:遞增數字/短 uuid=可枚舉面存在)。嚴禁實際向非自有帳號投遞——那會產生真實用戶騷擾,違反唯讀 RoE。"
+  - verify: "在獲授權的自有雙帳號環境(或用站方測試帳號)做最終確認:帳號 A 匿名(不帶任何憑證)呼叫發信端點、收件人填帳號 B → 帳號 B 收到訊息,即為完整 BOLA+未驗證雙重成立的 POC。記錄:請求封包、HTTP 回應、收到訊息截圖、時間戳,即 bug bounty 等級證據鏈。"
+  - note: "速率面佐證(不轟炸):檢查回應頭有無 X-RateLimit 類標頭、重試同請求是否立即 429。若無任何限流跡象,在報告註記『無速率限制證據』即可,禁止實際轟炸驗證。"
+  - reference: "對應標準:OWASP API Security Top 10 2023 — API1:2023 Broken Object Level Authorization(收件人 ID 未授權)、API2:2023 Broken Authentication(端點無驗證)、API4:2023 Unrestricted Resource Consumption(無限流);CWE-285 Improper Authorization、CWE-639 Authorization Bypass Through User-Controlled Key、CWE-306 Missing Authentication for Critical Function、CWE-1188(Insecure Intra-Application Default)。修復方向:發信端點強制認證+綁定 session 用戶;收件人參數改由伺服器端從 session 推導或驗證關係(好友/訂單);認證碼綁定服務端 session 而非接受客戶端 ID;加速率限制(帳號+IP+收件人多維度)與每日配額;發信內容模板化禁止自由文字;監控異常發信量。"
