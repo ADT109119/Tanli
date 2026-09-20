@@ -50,7 +50,7 @@
 
 - **多步驟自主執行**：DAG 規劃器 + ReAct 執行循環，依目標類型自動路由攻擊面
 - **掃描器自動化**：nuclei / sqlmap / OWASP ZAP 於 Docker 沙箱內全自動執行，結果自動轉為 findings
-- **LLM 攻擊劇本 (Playbook)**：五套 OWASP GenAI 劇本，基線對照 + 哨兵標記 + 確定性規則 + LLM judge 二次判定，誤報過濾
+- **LLM 攻擊劇本 (Playbook)**：十一套 OWASP GenAI 劇本（5 套執行型 + 6 套越獄方法論），基線對照 + 哨兵標記 + 確定性規則 + LLM judge 二次判定，誤報過濾
 - **CVSS v3.1 自動評分**：內嵌官方公式（2592 向量對權威庫零誤差），severity/category 自動映射評分量表
 - **人工複核門禁**：High/Critical 發現一律標記「待人工確認」，報告未定稿前 CLI 明確警示，防止草稿被當正式報告發布
 - **簽名授權模型**：預設僅限 localhost；擴大範圍需 Ed25519 JWS 簽名憑證 + Scope Statement 強制校驗，越界即中止
@@ -146,6 +146,12 @@ export REDTEAM_JUDGE_API_KEY="***"          # 本地端點可免
 | llm-003 | LLM02 | 系統提示洩漏（指令自披露 / 翻譯 / roleplay） |
 | llm-004 | LLM10 | 不當輸出處理（Markdown/HTML XSS,hybrid） |
 | llm-005 | LLM03 | 過度代理內省（工具/計畫自披露） |
+| llm-006 | LLM01 | 多輪與偽造歷史越獄（Crescendo、Many-shot、Skeleton Key、prefill） |
+| llm-007 | LLM01 | 人格虛擬化與敘事包裝（DeepInception、Policy Puppetry、情感槓桿） |
+| llm-008 | LLM01 | 編碼與混淆繞過（Base64、自訂密碼、低資源語言、零寬字元、ASCII 藝術字） |
+| llm-009 | LLM01 | 間接注入武器化（零點擊 Markdown 外洩、Confused Deputy、記憶投毒） |
+| llm-010 | LLM01 | Reasoning 模型攻擊與護欄錯配（Bad Likert Judge、Echo Chamber、思考預算） |
+| llm-011 | LLM01 | 多模態視覺語言注入（OCR 夾帶指令、隱形對比度、版面劫持） |
 
 安全設計：payload 全部無害化（`payload_policy: benign`）、token 預算熔斷、具副作用劇本一律需授權憑證。
 
@@ -174,7 +180,7 @@ Tanli 自身的 agent 亦支援執行期注入使用者技能：把 `*.md` 放�
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 184 項測試,全程離線
+pytest tests/ -q          # 191 項測試,全程離線
 tanli self-test           # 靶場端到端煙霧測試,須全綠
 ```
 
@@ -183,7 +189,7 @@ tanli self-test           # 靶場端到端煙霧測試,須全綠
 
 ## 專案狀態
 
-M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 五套攻擊劇本 / CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。184 項測試全綠。
+M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 十一套攻擊劇本 / CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。191 項測試全綠。
 
 ## 授權條款
 

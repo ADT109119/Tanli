@@ -50,6 +50,35 @@ def test_bola_family_playbooks():
     assert not d.executable  # 鐵律:利用步驟僅方法論,不直接執行
 
 
+def test_llm_jailbreak_expansion_playbooks():
+    """越獄技術分類擴充(llm-006~011)入庫可查,payload 全良性。"""
+    lib = load_library()
+    for q, tid in [("Crescendo", "llm-006"), ("Skeleton Key", "llm-006"),
+                   ("Many-shot", "llm-006"), ("persona", "llm-007"),
+                   ("Policy Puppetry", "llm-007"), ("Base64", "llm-008"),
+                   ("ArtPrompt", "llm-008"), ("exfil", "llm-009"),
+                   ("Confused Deputy", "llm-009"), ("Likert", "llm-010"),
+                   ("Echo Chamber", "llm-010"), ("Vision", "llm-011"),
+                   ("OCR", "llm-011")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    # llm 家族是 benign probe 劇本(同 llm-001 設計):可執行但 payload 全良性標記
+    for n in range(6, 12):
+        d = get_by_id(lib, f"llm-{n:03d}")
+        assert d is not None, f"llm-{n:03d} 未入庫"
+        assert d.target_type == "llm_app"
+        assert d.payload_policy == "benign", f"llm-{n:03d} 必須良性 payload"
+    # 出處標注:方法來源論文/機構名入庫
+    d6 = get_by_id(lib, "llm-006")
+    assert d6 is not None and "Crescendo" in d6.render() and "Anthropic" in d6.render()
+    d10 = get_by_id(lib, "llm-010")
+    assert d10 is not None and "Unit 42" in d10.render()
+    # 安全紅線:外洩向量只用假域名
+    d9 = get_by_id(lib, "llm-009")
+    r9 = d9.render()
+    assert "example.invalid" in r9
+
+
 def test_operator_doc_playbooks():
     """操作者文件《現代 Web 攻擊底層邏輯》提煉的六本(21-26)+web-006 升級入庫可查。"""
     lib = load_library()

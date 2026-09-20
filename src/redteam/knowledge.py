@@ -89,6 +89,9 @@ def _from_llm(pb: dict, src: str) -> PlaybookDoc:
     summary = (f"{len(probes)} probes; baseline_control={baseline}; "
                f"detect_rules={','.join(d for d in detect if d)}; "
                f"session_reset={pb.get('session', {}).get('reset', False)}")
+    # playbook 自帶 summary(方法論出處)前置進目錄與搜尋文件
+    if custom := str(pb.get("summary", "")).strip():
+        summary = f"{custom} | {summary}"
     return PlaybookDoc(
         id=str(pb.get("id", src)), name=str(pb.get("name", "")),
         owasp=str(pb.get("owasp", "")), target_type=str(pb.get("target_type", "")),

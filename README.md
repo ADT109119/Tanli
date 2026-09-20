@@ -50,7 +50,7 @@ Red teaming is that same dive: the truly critical vulnerabilities hide in the de
 
 - **Multi-step autonomous execution**: DAG planner + ReAct execution loop; the attack surface is routed automatically by target type
 - **Scanner automation**: nuclei / sqlmap / OWASP ZAP run fully autonomously inside Docker sandboxes; results are converted into findings automatically
-- **LLM attack playbooks**: five OWASP GenAI playbooks — baseline control + sentinel markers + deterministic rules + an LLM-judge second pass for false-positive filtering
+- **LLM attack playbooks**: eleven OWASP GenAI playbooks covering direct jailbreak, multi-turn escalation (Crescendo/Many-shot/Skeleton Key), persona virtualization, encoding obfuscation (Base64/cipher/low-resource/ASCII-art), indirect-injection weaponization (zero-click exfil/confused deputy/memory poisoning), reasoning-model attacks (Bad Likert Judge/Echo Chamber) and multimodal injection — baseline control + sentinel markers + deterministic rules + an LLM-judge second pass for false-positive filtering
 - **Automatic CVSS v3.1 scoring**: the official formula embedded (zero deviation from the authoritative library across all 2,592 vectors), with severity/category → vector mapping
 - **Human review gate**: every High/Critical finding is flagged "awaiting human confirmation"; the CLI warns explicitly until the report is finalized, so drafts never get published as official reports
 - **Signed authorization model**: localhost-only by default; widening scope requires an Ed25519 JWS-signed credential plus mandatory Scope Statement validation — crossing the line aborts the run
@@ -147,6 +147,12 @@ export REDTEAM_JUDGE_API_KEY="***"          # optional for local endpoints
 | llm-003 | LLM02 | System-prompt leakage (instruction self-disclosure / translation / roleplay) |
 | llm-004 | LLM10 | Insecure output handling (Markdown/HTML XSS, hybrid) |
 | llm-005 | LLM03 | Excessive agency introspection (tool/plan self-disclosure) |
+| llm-006 | LLM01 | Multi-turn & fabricated-history jailbreak (Crescendo, Many-shot, Skeleton Key, prefill) |
+| llm-007 | LLM01 | Persona virtualization & narrative wrapper (DeepInception, Policy Puppetry, emotional leverage) |
+| llm-008 | LLM01 | Encoding & obfuscation bypass (Base64, custom cipher, low-resource language, zero-width, ASCII-art) |
+| llm-009 | LLM01 | Indirect injection weaponization (zero-click markdown exfil, confused deputy, memory poisoning) |
+| llm-010 | LLM01 | Reasoning-model attacks & guardrail mismatch (Bad Likert Judge, Echo Chamber, reasoning budget) |
+| llm-011 | LLM01 | Multimodal vision-language injection (OCR-smuggled instructions, invisible contrast, layout hijack) |
 
 Safety by design: all payloads are benignized (`payload_policy: benign`), token-budget circuit breaker, and any playbook with side effects requires an authorization credential.
 
@@ -176,7 +182,7 @@ Tanli's own agent also ingests user skills from `~/.tanli/skills/*.md` at runtim
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 184 tests, fully offline
+pytest tests/ -q          # 191 tests, fully offline
 tanli self-test           # lab end-to-end smoke, all-PASS required
 ```
 
@@ -185,7 +191,7 @@ tanli self-test           # lab end-to-end smoke, all-PASS required
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / five attack playbooks / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 184 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / eleven attack playbooks (5 execution + 6 jailbreak-methodology) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 191 tests green.
 
 ## License
 
