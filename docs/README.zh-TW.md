@@ -160,12 +160,22 @@ export REDTEAM_JUDGE_API_KEY="***"          # 本地端點可免
 3. 每項發現:CVSS v3.1 向量與分數、PoC 重現步驟、證據、人工複核狀態
 4. 修復建議:依 category → OWASP 類別 → 通用三級映射,自動去重彙整
 
+## 給 AI Agent 的使用說明
+
+本 repo 附上一份 **agent 專用技能檔**:[SKILL.md](../SKILL.md)——精簡操作手冊,供任何 AI agent
+(Hermes / OpenCode / Codex / Claude Code)在自主驅動 `tanli` 前閱讀:六步作戰流程
+(RoE → 簽憑證 → agent 探測 → 報告複核)、命令速查、安全圍籬、實務坑(WAF 假陽性判讀、
+CVE 資料源滯後、token 預算、workspace 跨會話記憶)。
+
+Tanli 自身的 agent 亦支援執行期注入使用者技能:把 `*.md` 放進 `~/.tanli/skills/`
+即進入其 `get_playbook` 知識庫,不需重裝、不需改碼。
+
 ## 開發
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 131 項測試,全程離線
-tanli self-test           # 靶場端到端 7 斷言
+pytest tests/ -q          # 184 項測試,全程離線
+tanli self-test           # 靶場端到端煙霧測試,須全綠
 ```
 
 - 規格書:`SPECIFICATION-FINAL.md`(v3.4,agy + opencode 雙 agent 協同規劃)
@@ -173,7 +183,7 @@ tanli self-test           # 靶場端到端 7 斷言
 
 ## 專案狀態
 
-M1–M6 完成:CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 五套攻擊劇本 / CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test。131 項測試全綠。
+M1–M6 完成:CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 五套攻擊劇本 / CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。184 項測試全綠。
 
 ## 授權條款
 

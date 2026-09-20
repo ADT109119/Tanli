@@ -161,12 +161,23 @@ Every run outputs `report_<target>_<timestamp>.md`:
 3. Per finding: CVSS v3.1 vector and score, PoC reproduction steps, evidence, human-review status
 4. Remediation advice: category → OWASP class → generic three-tier mapping, automatically deduplicated
 
+## For AI agents
+
+This repo ships an agent-facing skill file: [SKILL.md](SKILL.md) — a compact operations manual
+(any AI agent: Hermes / OpenCode / Codex / Claude Code) covering the six-step engagement flow
+(RoE → credential → agent run → report review), command cheatsheet, safety fences, and
+battle-tested pitfalls (WAF false positives, CVE-source lag, token budgets, workspace memory).
+Read it before driving `tanli` autonomously.
+
+Tanli's own agent also ingests user skills from `~/.tanli/skills/*.md` at runtime
+(served through its `get_playbook` knowledge base — drop a file, no reinstall needed).
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 131 tests, fully offline
-tanli self-test           # lab end-to-end, 7 assertions
+pytest tests/ -q          # 184 tests, fully offline
+tanli self-test           # lab end-to-end smoke, all-PASS required
 ```
 
 - Specification: `SPECIFICATION-FINAL.md` (v3.4, planned collaboratively by the agy + opencode dual-agent pipeline)
@@ -174,7 +185,7 @@ tanli self-test           # lab end-to-end, 7 assertions
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / five attack playbooks / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test. All 131 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / five attack playbooks / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 184 tests green.
 
 ## License
 
