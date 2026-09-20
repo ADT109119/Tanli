@@ -79,6 +79,29 @@ def test_llm_jailbreak_expansion_playbooks():
     assert "example.invalid" in r9
 
 
+def test_infra_exposure_playbooks():
+    """基礎設施暴露面族(31-35):數據服務/管理控制台/容器控制面/子網域接管/JWT。"""
+    lib = load_library()
+    for q, tid in [("redis", "web-031"), ("elasticsearch", "web-031"),
+                   ("jenkins", "web-032"), ("adminer", "web-032"),
+                   ("docker", "web-033"), ("kubernetes", "web-033"),
+                   ("subdomain", "web-034"), ("cname", "web-034"),
+                   ("jwt", "web-035"), ("jku", "web-035")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    for n in range(31, 36):
+        d = get_by_id(lib, f"web-{n:03d}")
+        assert d is not None and not d.executable, f"web-{n:03d} 必須是方法論劇本"
+        assert d.payload_policy == "methodology-only"
+    # 真實 campaign 出處與紅線敘事入庫
+    d32 = get_by_id(lib, "web-032")
+    assert "Trend Micro" in d32.render() and "嚴禁" in d32.render()
+    d34 = get_by_id(lib, "web-034")
+    assert "Censys" in d34.render()
+    d35 = get_by_id(lib, "web-035")
+    assert "RFC 8725" in d35.render()
+
+
 def test_framework_exposure_playbooks():
     """框架暴露面族(27-30):WordPress/Laravel-Django 調試/Actuator/.git 暴露入庫可查。"""
     lib = load_library()

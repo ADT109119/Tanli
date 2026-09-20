@@ -51,7 +51,7 @@
 - **多步驟自主執行**：DAG 規劃器 + ReAct 執行循環，依目標類型自動路由攻擊面
 - **掃描器自動化**：nuclei / sqlmap / OWASP ZAP 於 Docker 沙箱內全自動執行，結果自動轉為 findings
 - **LLM 攻擊劇本 (Playbook)**：十一套 OWASP GenAI 劇本（5 套執行型 + 6 套越獄方法論），基線對照 + 哨兵標記 + 確定性規則 + LLM judge 二次判定，誤報過濾
-- **框架暴露面劇本**：二十五套 Web 方法論劇本——SQLi/XSS/SSRF/SSTI/CSRF/BOLA 全譜，外加 CMS/框架配置錯誤族：WordPress 設定檔備份與 xmlrpc 放大、Laravel `.env` / Django DEBUG / phpinfo 探針、Spring Boot Actuator `/heapdump`、`.git` 目錄與 SourceMap 暴露——全部被動探測、僅存證據（端點+狀態碼+雜湊；外洩 secret 一律不下載不摘錄）
+- **框架與基礎設施暴露面劇本**：三十套 Web 方法論劇本——SQLi/XSS/SSRF/SSTI/CSRF/BOLA 全譜，外加 CMS/框架配置錯誤族（WordPress 設定檔備份與 xmlrpc 放大、Laravel `.env` / Django DEBUG / phpinfo 探針、Spring Boot Actuator `/heapdump`、`.git` 目錄與 SourceMap）及互聯網掃描器族（未授權 Redis/Elasticsearch、Jenkins/Tomcat 管理控制台、Docker/K8s 控制面、子網域接管、JWT 棧缺陷）——全部被動探測、僅存證據（端點+狀態碼+雜湊；外洩 secret 一律不下載不摘錄）
 - **CVSS v3.1 自動評分**：內嵌官方公式（2592 向量對權威庫零誤差），severity/category 自動映射評分量表
 - **人工複核門禁**：High/Critical 發現一律標記「待人工確認」，報告未定稿前 CLI 明確警示，防止草稿被當正式報告發布
 - **簽名授權模型**：預設僅限 localhost；擴大範圍需 Ed25519 JWS 簽名憑證 + Scope Statement 強制校驗，越界即中止
@@ -190,7 +190,7 @@ tanli self-test           # 靶場端到端煙霧測試,須全綠
 
 ## 專案狀態
 
-M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 三十六套攻擊劇本（LLM 11 套：5 執行型 + 6 越獄方法論；Web 25 套方法論含框架暴露面族）/ CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。192 項測試全綠。
+M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 四十一套攻擊劇本（LLM 11 套：5 執行型 + 6 越獄方法論；Web 30 套方法論含框架與基礎設施暴露面族）/ CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。193 項測試全綠。
 
 ## 授權條款
 

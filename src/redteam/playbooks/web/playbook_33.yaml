@@ -1,0 +1,28 @@
+id: web-033
+name: "容器與編排控制面暴露:Docker Engine API 2375、Kubernetes API 匿名認証與 RBAC 濫用"
+owasp: A01/A02/A05 (存取控制+配置錯誤+安全供應鏈交界)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  研究提煉(Kaspersky Dero 挖礦 campaign + Kubernetes 十大誤配研究):容器時代
+  『一個未加護的控制面 = 整個資料中心的 root』。兩族:(1)Docker Engine API
+  2375(tcp 明文,無 TLS 無認證)——POST /containers/create + /attach 即可
+  以privileged 掛載宿主 / 逃逸;Kaspersky 記錄的 Dero campaign 正是掃描全網
+  2375 投放挖礦馬,官方緩解建議就兩句:非必要不發布、發布必上 TLS+mTLS。
+  端點為 HTTP GET 可指紋(/version /info 回 JSON=暴露)。(2)Kubernetes API
+  6443——anonymous auth 開啟時 curl /api/v1/namespaces 可得清單;RBAC 誤配
+  (cluster-admin 綁 default serviceaccount、wildcard verbs)讓單個洩漏的
+  SA token 升級為集群接管;kubectl exec 進 Pod 後宿主節點提權鏈完整。
+  另外 kubelet 10250 未設 auth 時 /runningpods/ /podman 端點直接交付
+  執行能力;Dashboard/kubeflow/mlflow 管理 UI 是 scan 常客。唯讀紀律:
+  自有資產以內部盤點/Shodan 自查;對授權目標僅 GET /version 級指紋,
+  嚴禁任何 POST 建立容器/Pod(即真實入侵)、嚴禁 exec。
+
+steps:
+  - probe: "Docker API 指紋(GET 只讀):GET /version(GET 只讀):GET /version 回 JSON(Architecture/ApiVersion)、GET /info 洩容器清單/鏡像存儲/宿主內核。200 即 Critical 存在性證據;嚴禁 POST /containers/create(建容器=真實入侵,一分鐘內可宿主接管)。"
+  - probe: "K8s 面被動盤點:GET /version 於 6443(k8s API 指紋 JSON)、/healthz /readyz 狀態、kubelet 10250 GET /pods(匿名開啟時直接回 Pod 清單=Critical)。全部單發 GET 判存在;嚴禁 kubectl auth can-i 式的權限枚舉探測(對生產集群屬主動掃描,超出唯讀紅線)。"
+  - note: "報告敘事與修復:2375 暴露=Critical(等同宿主 root;修復=綁 127.0.0.1 或 unix socket、遠端管理走 TLS+mTLS 認證、雲端安全組封端口);k8s anonymous=Critical(--anonymous-auth=false、API server 僅內網、RBAC 最小化、Secret 加密靜態存儲、PSA 限制 privileged);kubelet auth-mode=Webhook+readonly port 10255 關閉。引用 Kaspersky 建議原文增加說服力:『refrain from publishing Docker APIs unless operational need; secure via TLS』。"
+  - reference: "來源:Kaspersky Securelist《Dero crypto miner spreading via exposed container environments》(默認 2375 掃描投放)、Aqua/Kubescape 十大 K8s 誤配(CIS benchmark 對照)、Trend Micro Docker API 濫用研究。OWASP WSTG 4.01 架構盤點;CIS Kubernetes Benchmark 5.1/5.2。"

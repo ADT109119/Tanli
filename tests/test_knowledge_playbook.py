@@ -101,7 +101,7 @@ def test_agent_get_playbook_catalog_then_detail(tools):
 def test_agent_get_playbook_search(tools):
     brain = FakeBrain([
         {"thought": "查 SQL 相關", "tool": "get_playbook",
-         "args": {"query": "sql"}},
+         "args": {"query": "盲注"}},
         {"final": "done"},
     ])
     res = run_agent(tools, brain, goal="t", max_steps=4)

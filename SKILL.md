@@ -145,8 +145,9 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
 內含 11 本 OWASP GenAI playbook（越獄、提示注入、系統提示洩漏、過度代理、輸出處理、
 多輪遞進、人格虛擬化、編碼繞過、間接注入武器化、推理模型攻擊、多模態注入），
 基線對照 + 哨標 + 確定性規則 + LLM judge 二審。playbook 為 YAML 知識庫
-（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 25 本方法論劇本含
-CMS/框架暴露面族：WordPress/Laravel/Actuator/.git），可直接擴寫；`--playbook <file>` 指定單本。
+（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 30 本方法論劇本含
+CMS/框架暴露面族 WordPress/Laravel/Actuator/.git 與互聯網掃描器族
+Redis/ES/Jenkins/Docker-K8s/子網域接管/JWT），可直接擴寫；`--playbook <file>` 指定單本。
 
 ## 8. 產出物位置
 

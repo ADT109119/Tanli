@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tanli"
-version = "0.0.1"
+version = "0.0.2"
 description = "探驪 Tanli - 自主紅隊測試 Agent(LLM + Web 雙軌安全評估)"
 readme = "README.md"
 license = { text = "Apache-2.0" }

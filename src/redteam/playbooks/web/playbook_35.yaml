@@ -1,0 +1,29 @@
+id: web-035
+name: "JWT 認證棧缺陷:alg=none、RS256→HS256 演算法混淆、jku/x5u 注入與 kid SQLi"
+owasp: A07 (OWASP Top10 2025 認證失敗) + A01
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: false
+
+summary: >
+  研究提煉(JWT 演算法混淆攻擊研究):JWT 的致命設計陷阱是『簽章驗證策略
+  由 token 自身宣告的 alg 驅動』——正確做法是伺服器端固定接受清單,錯誤
+  做法是庫端『看菜下飯』。四條武器化鏈:(0)alg:none——歷史規格保留的
+  『已於他處驗證』模式,庫誤接受時撕掉簽章段(尾點留空)即得未簽名但通過
+  驗證的 token;(1)RS256→HS256 混淆——服務端用 RSA 公鑰(常公開可取:
+  /.well-known/jwks.json)驗證 RS256,攻擊者改 alg=HS256 並以同一公鑰字節
+  串作 HMAC secret 重簽,易錯庫把公鑰當對稱密鑰用→偽造 admin 硬幣;(2)jku/x5u
+  注入——header 的 jku 指向攻擊者控制的 JWKS URL(需防 SSRF 白名單),
+  伺服器去拉取攻擊者的『公鑰』完成驗證;(3)kid 注入——key lookup 走
+  未淨化 SQL(UNION SELECT 強迫返回攻擊者已知 secret)或路徑構造
+  (/keys/<kid>.pem 注入 ../../dev/null 讀空檔當密鑰)。檢測側全部被動:
+  從既有流量/公開端點取得 token、解 header 看 alg/kid/jku 欄位即知棧配置
+  風向。本劇僅方法論;偽造 token 的實際利用必須在書面授權+自有測試帳號
+  範圍內執行,嚴禁對生產真實帳號做權限提昇嘗試。
+
+steps:
+  - recon: "JWT 資產盤點(被動):登入/API 響應中的 token 取樣(自有測試帳號);base64url 解 header——記錄 alg(接受清單暴露風向)、kid/jku/x5u/jwk 欄位存在性;站點公開 /.well-known/jwks.json、/oauth/keys 是否可取 RSA 公鑰(可取=RS256→HS256 前置成立)。"
+  - probe: "配置風險判定(零利用):header 同時接受多 alg 的跡象(不同端點回不同 alg)、token 時效(jti/exp 缺失=可重用)、kid 是否疑似直接入 SQL/路徑(格式異常回 500 即洩)。判定為『棧配置暴露』立 finding,利用鏈不執行。"
+  - note: "報告敘語與修復:alg 混淆可偽造任意使用者=High~Critical(直接 ATO)。修復:伺服器端硬鎖演算法白名單(庫層:PyJWT algorithms=['RS256'] 顯式指定,禁用庫自動選型)、拒絕 alg=none、jku/x5u 固定信任錨(僅內部 CA+域名白名單)、kid 走參數化查詢+白名單格式、公鑰取得端點與驗證邏輯隔離。"
+  - reference: "來源:JWT BCP(RFC 8725 Best Current Practices——演算法固定/拒 none 的標準依據)、Auth0 演算法混淆原始披露(2015 RS256→HS256)、PortSwigger Web Security Academy JWT 章節(kid SQLi/路徑變體)、jsmon RS256→HS256+JKU+kid SQLi 三鏈 PoC 研究。CVE 家族:imagehashlib CVE-2024-31449 式演算法混淆雖非 JWT 同構但同屬『輸入宣告解析方式』缺陷族。"

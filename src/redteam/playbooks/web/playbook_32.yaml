@@ -1,0 +1,28 @@
+id: web-032
+name: "管理控制台暴露與默認憑證面:Jenkins Script Console、Tomcat Manager、phpMyAdmin/Adminer"
+owasp: A07/A02 (OWASP Top10 2025 認證失敗+安全配置錯誤)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  研究提煉(Trend Micro Jenkins 挖礦研究 + SANS ISC 掃描年報):管理介面是
+  mass scanner 的頭號獵物,因為一個默認憑證或匿名開關就等於整台機器的 shell。
+  三族:(1)Jenkins /script(Groovy Script Console)——匿名或 weak auth 誤配時
+  直接 RCE;真實 campaign 鏈:Groovy 腳本先殺掉佔用 >90% CPU 的競爭進程,
+  探 /dev/shm 可寫性,下載挖礦 binary 以 SHA256 去重,再經 cron + systemd-run
+  持久化並用 flock 保證單例——一份完整的『管理控制台→持久化』教科書。
+  (2)Tomcat /manager/html——默認 tomcat/tomcat、admin/admin 族,登陸成功後
+  WAR upload 部署即 RCE;/host-manager 同面。(3)phpMyAdmin/Adminer——
+  /phpmyadmin /pma /adminer /db-admin 路徑輪轉+SANS ISC 常年熱掃目標,
+  root 空密碼或 mysql 默認帳密即整庫淪陷,phpmyadmin 歷史 LFI/SQLi 更讓
+  存在本身即攻擊面。唯讀紀律:以 401/403/登入頁指紋確認存在;
+  嚴禁嘗試任何默認憑證登錄(屬真實憑證攻擊,即使失敗也觸發目標審計日誌)、
+  嚴禁碰 /script 執行。報告以『管理介面公網暴露+無第二因子/無來源限制』立 finding。
+
+steps:
+  - probe: "存在性指紋(各一發 GET,只判狀態碼):/script 或 /jenkins/script(200+Groovy 表單=Critical 存在性證據,立即停手嚴禁執行)、/manager/html(401 Basic realm='Tomcat Manager Application' 指紋)、/phpmyadmin/ /adminer/ 登入頁特徵(版本字串入 CVE 比對)。"
+  - probe: "版本與防護盤點(被動):登入頁/錯誤頁洩出的版本號(Jenkins X-Jenkins 標頭、phpMyAdmin 頁腳)、有無前置 WAF/認證閘道(401 來自應用還是邊界)、路徑是否被反向代理隱藏。管理介面『有認證』不等於安全:仍需報告暴破防護與來源限制。"
+  - note: "報告敘事與修復:管理控制台公網可達=Critical(無論有無默認憑證,暴露本身即高危——Shodan 上每個管理埠都被持續掃);修復:管理介面移出公網(VPN/零信任/跳板機+來源 IP ACL)、Jenkins 啟用 Matrix Authorization+關匿名+Script Console 按需關閉(Startup 參數 -Djenkins.install.runScriptSecurity)、Tomcat 刪 manager 或改 tomcat-users 強密碼+IP valve、phpMyAdmin 改路徑+SSO+移除安裝檔。"
+  - reference: "來源:Trend Micro《Turning Jenkins Into a Cryptomining Machine From an Attackers Perspective》(/dev/shm 探測、SHA256 去重、cron+systemd-run+flock 持久化鏈)、SANS ISC handler 日誌 adminer 掃描熱度、Tomcat 官方 Security Howto。OWASP WSTG 4.04.07 Test Upload of Unrestricted File / 4.1.05 guess username。"

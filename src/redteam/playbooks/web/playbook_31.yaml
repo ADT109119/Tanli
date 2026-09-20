@@ -1,0 +1,28 @@
+id: web-031
+name: "資料庫與中間件未授權暴露:Redis/Elasticsearch/MongoDB/memcached 默認埠裸奔"
+owasp: A01/A02 (OWASP Top10 2025 存取控制失效+安全配置錯誤)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  研究提煉(Shodan/Censys 掃描生態 + Cybernews 240億憑證庫事件):互聯網上
+  存在全年無休的默認埠掃描器,數據中間件的『預設無認證』是重災區——Redis 6379、
+  Elasticsearch 9200、MongoDB 27017、memcached 11211 都在 mass scanner 的
+  固定清單裡。殺傷譜:(1)Redis 未授權——CONFIG SET dir/dbfilename 寫入
+  cron 或 SSH authorized_keys 得 RCE,MODULE LOAD 載入惡意 so 直接執行;
+  (2)Elasticsearch——GET / 回 version+tagline 'You Know, for Search' 即未設防,
+  _cat/indices 全庫目錄、_search 可拖資料(Cybernews 2026 查獲的 240 億條、
+  8.3TB 憑證庫即是『暴露=全洩』的最新例證,數據源含直接從活伺服器導出者);
+  (3)MongoDB——歷史默認無認證遭過大規模勒索清空(wiped+ransom 訊息)campaign;
+  (4)memcached UDP——本身是反射放大 DoS 的武器化素材,暴露即淪為攻擊跳板。
+  唯讀紀律:會說 HTTP 的服務(ES)以單發 GET 指紋判定;RESP/BSON 協議服務
+  不在 HTTP 唯讀範圍,只做被動情報(自有資產埠盤點/Shodan 自查),
+  嚴禁對非自有資產發起協定層連接。
+
+steps:
+  - probe: "Elasticsearch 指紋(HTTP,零副作用):GET / 回 JSON 含 version.number+tagline 即暴露;GET /_cat/indices?format=json 存在性判別(只記索引清單數量作證據,嚴禁 _search 拖取文件內容——文件即個資,取得即違法)。/_cluster/health 洩叢集命名與節點拓撲。"
+  - probe: "非 HTTP 服務的合規路徑:Redis/Mongo/Memcached 以『自有資產外部盤點』(Shodan/Censys 自查帳號)核對暴露面,或內部埠掃描報告;不對目標站主動發起 RESP/BSON 連接。報告以『資產管理情報』引用,立 finding 措辭:『6379 曝露於公網且無 requirepass』。"
+  - note: "報告敘事與修復:未授權數據服務=Critical(等同整庫外洩+RCE 前置);ES 暴露=High~Critical(視索引內容)。修復要點:bind 127.0.0.1/內網、Redis requirepass+rename-command 關鍵指令+protected-mode、ES 啟用 x-pack security 或至少反向代理+認證、Mongo enableAuth+keyfile、memcached -U 0 關 UDP 或上游 ACL 封 11211、全面上網路層安全組(僅容許應用伺服器 IP)。"
+  - reference: "來源:Trend Micro《Exposed Redis Instances Abused for Remote Code Execution》(CONFIG/MODULE 鏈)、Cybernews via Malwarebytes 2026-06《24 billion stolen records》(8.3TB、36 源、含 live server 導出)、Shodan 暴露 Jenkins/ES 統計、MongoDB ransomware wiped campaign 公開報導。OWASP API Security Top10 2023 API1/A01。"

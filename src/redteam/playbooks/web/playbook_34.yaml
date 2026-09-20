@@ -1,0 +1,29 @@
+id: web-034
+name: "子網域接管:懸掛 DNS/CNAME 指向已釋放資源與Supply Chain信任繼承"
+owasp: A02/A05 (OWASP Top10 2025 配置錯誤+供應鏈失效交界)
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  研究提煉(Censys Dangling DNS 研究 + Danglegeddon 事件):組織下架服務
+  (SaaS trial、CDN zone、未續租的 third-party hosting)後常忘記刪除 DNS
+  記錄,留下指向『可被他人註冊資源』的懸掛 CNAME——攻擊者全網自動化掃描
+  子網域+CNAME 有效性,搶到資源即接管該子網域,並且『繼承』主網域的協同
+  信任:Cookie scope(.example.com)、CSP 白名單、OAuth 回調白名單、品牌
+  信任全部落到攻擊者手裡,直接變成釣魚、token 攔截、供應鏈投毒跳板。
+  Danglegeddon(2022)一次事件即涉及數萬個可接管子網域,證明這是規模化、
+  系統性的配置腐化問題而非孤例;Censys 強調『攻擊者自動化使得發現速度
+  遠超人工』的不對稱性。檢測側:子網域枚舉(cert transparency 日誌、
+  主動 DNS 列舉)+CNAME 解析+『服務未配置』錯誤頁指紋(AWS S3
+  NoSuchBucket、GitHub Pages 404、Heroku 'No such app'、Azure 410 等
+  上百個已知簽章)。唯讀紀律:僅 DNS 解析+HTTP 錯誤頁指紋判定;
+  嚴禁實際註冊被釋放資源做『概念驗證』(接管即真實佔有,需書面授權+
+  即時歸還流程,超出常規 pentest 紅線)。
+
+steps:
+  - probe: "子網域收集(被動優先):cert transparency(crt.sh 查 *.example.com)、主站 HTML/JS 內引用子網域、SPF/DMARC 記錄內網域;自有資產可加主動 DNS 列舉。產出候選清單。"
+  - probe: "懸掛判定(零副作用):逐一 dig CNAME——CNAME 指向的資源返回『服務未配置』型錯誤即高可疑;比對 takeover 指紋庫(S3 NoSuchBucket / GitHub Pages 404 'site not found' / Heroku / Shopify / Unbounce / Zendesk 等已知簽章)。只記錄『CNAME 目標已釋放』事實,嚴禁註冊嘗試。"
+  - note: "報告敘事與修復:每個可接管子網域=High~Critical(取決於 Cookie/CSP/OAuth 是否繼承主域;*.example.com Cookie + 回調白名單命中=Critical)。修復:DNS 下線流程與服務下架綁定(teardown runbook)、定期懸掛記錄掃描(自動化,與 Censys 不對稱性賽跑)、CSP/OAuth 配置避免 wildcard 子域信任、CNAME 指向內部可控制的佔位記錄。"
+  - reference: "來源:Censys《How a Dangling DNS Entry Can Lead to a Subdomain Takeover》(自動化發現不對稱論述)、Danglegeddon(Lab06 2022,數萬可接管域)、subdomaintakeover.org 指紋庫、OWASP WSTG-ATH-011 (WSTG-CONF 子域列舉)。相關事件:第三方 SaaS trial 過期遭接管投毒之供應鏈案例。"
