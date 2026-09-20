@@ -1,0 +1,24 @@
+id: web-008
+name: "WorstFit — Windows ANSI 字元轉換攻擊(2024 Top10 #4)"
+owasp: A03
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  源自 PortSwigger Top 10 2024 第 4 名「WorstFit: Unveiling Hidden Transformers in
+  Windows ANSI」(Orange Tsai + Splitline/DEVCORE, Black Hat EU 2024)。Windows 處理
+  非 ASCII 字元時自動套用 BestFit 對應,把「看起來很像」的字元轉成 ASCII:∞→8、π→p、
+  日圓符號 ¥→反斜線 \。隱藏轉換器(Hidden Transformer)存在於 OS/編譯套件/開發者三層
+  之間的三不管地帶,已證明的三種手法:Filename Smuggling、Argument Splitting、
+  Environment Variable Confusion。
+
+steps:
+  - recon: "識別 Windows/IIS 後端與字元轉換暴露面:檔名處理(上傳/下載/解壓縮)、呼叫 CLI 工具鏈(curl/7z/自製 cmd 包裹)的端點、環境變數傳入。IIS 特徵:big5/CP950 錯誤頁、雙反斜線路徑行為。"
+  - probe: "Filename Smuggling — 用 ¥(U+00A5) 或其他 BestFit 來源字元冒充路徑分隔符,穿越『已過濾 \\ 與 /』的檔名校驗;同類:西里爾/全形字母冒充 ASCII 使黑名單繞過。僅觀察解析結果差異,不做實際寫檔。"
+  - probe: "Argument Splitting — 使用者輸入進入字元轉換後產生空白/引號/分隔字元,把單一參數裂解成多個 CLI 參數。檢查是否有輸入被轉出 -或空格 的痕跡(回顯/錯誤訊息/時間差)。"
+  - probe: "Environment Variable Confusion — 轉換後的輸入污染環境變數邊界(如轉出 = 號),影響子行程行為。"
+  - verify: "字元轉換問題常散在 OS/套件/應用三層:同一 payload 對直連應用與經 proxy 的差異、不同 codepage 環境的差異。歷史首例:PHP-CGI 檔名解析。"
+  - note: "利用路徑多涉及上傳/執行/寫檔——超出 read-only 預設;本劇本僅做『暴露面識別 + 影響評估』,實際利用需 RoE 明確放行。"
+  - reference: "來源:PortSwigger Top10 2024 #4;iThome news/167515(WorstFit 三手法)、worstfit.org。責任歸屬橫跨 OS/套件/開發者,通報常遇互相推責,可走 CERT/CC 協調。"

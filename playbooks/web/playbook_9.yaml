@@ -1,0 +1,22 @@
+id: web-009
+name: "協議層 SQLi 走私 + TE.0 請求走私(2024 Top10 #2/#3)"
+owasp: A03/A05
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  合併兩項 2024 Top10 協議層手法:#2「SQL Injection Isn't Dead: Smuggling Queries at
+  the Protocol Level」(Paul Gerste)——SQLi 不只走參數,可在 HTTP/2 框架層、首部、
+  分塊編碼等協議縫隙把查詢走私進應用;#3「Unveiling TE.0 HTTP Request Smuggling」
+  (Arnolfo/Gregorio/@_medusa_1_)——Transfer-Encoding: 0 或 TE+Content-Length 的
+  畸形組合使前後端對消息邊界認知分歧,請求被拼接/拆分給下一個請求者。
+
+steps:
+  - recon: "繪製協議棧:CDN/LB → 反代(nginx/IIS/ALB) → 應用,記錄每層支援的 HTTP 版本(TLS ALPN、http2 settings)、對 TE/CL 的處理。差異即走私候選面。"
+  - probe: "TE.0 變體探測(觀察型):Transfer-Encoding: 0 / x:0 / TE 混淆大小寫與空白,配合掛起的 body 觀察連接複用後下一個請求是否吃到殘留位元組。僅探測回顯差異,不投遞惡意 body。"
+  - probe: "協議層 SQLi 載具清單(皆為讀取路徑):HTTP/2 二元化框架僞裝、重疊 header、偽造 chunk 邊界、超長 URL 截斷、grpc-web 包裝。尋找『解析器看到 A、SQL 拼接器看到 B』的點。"
+  - verify: "走私判定:同一連接連續兩請求,第二請求的回應混入第一請求殘留(狀態汙染/快取錯配/身份錯置)。以 benign 標記請求配對驗證,命中即停。"
+  - note: "請求走私在 read-only 下仍可被動觀察(雙請求鏡像法);任何對快取/會話造成實際汙染的動作都越線,禁止。"
+  - reference: "來源:PortSwigger Top10 2024 #2/#3;iThome news/167513 榜單。延伸學習:PortSwigger Web Security Academy Request Smuggling 章節。"

@@ -1,0 +1,21 @@
+id: web-013
+name: "Sanitizer 繞過:DOMPurify 與文件內腳本(2024 Top10 #5/#7)"
+owasp: A03/A06
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2024 #5「Exploring the DOMPurify library: Bypasses and Fixes」(Mizu)——連最權威的
+  XSS sanitizer 都有繞過:配置錯誤(ADD_ATTR/RETURN_DOM/UPPERCASE)、mXSS(mutation
+  XSS,DOM 序列化差異)、瀏覽器行為差異。#7「CVE-2024-4367 Arbitrary JavaScript
+  execution in PDF.js」(Rinsma)——「只是渲染文件」的元件其實在執行攻擊者可控的
+  JavaScript。共同母題:sanitizer/渲染器是「信任邊界上的組件」,其繞過等同 RCE 前置。
+
+steps:
+  - recon: "盤點站方 XSS 防線是哪一層:後端過濾(libinjection/黑名單)、前端 sanitizer(抓 DOMPurify/sanitize-html 版號,參考 CDN/打包檔)、CSP 與否。『有 sanitizer』≠『sanitizer 正確配置』。"
+  - probe: "DOMPurify 變體目錄(只在自有靶場驗證;對目標僅做版號/配置指紋):過新/過舊版號比對官方 bypass advisory、AddHook 缺失、ALLOWED_TAGS/ATTR 過寬、mutation 面(svg/math/textarea 序列化差異)。"
+  - probe: "文件渲染面:PDF.js/docx 預覽/Office Online 嵌入等元件的版號 CVE 查詢(PDF.js: CVE-2024-4367)。『上傳文件→伺服器/瀏覽器渲染』鏈路視為腳本執行面,不是文件面。"
+  - verify: "反射點探測一律用 benign marker(本工具鐵律);任何『可執行 JS』證據以標記回顯截取,不投遞打碼/釣魚 payload。"
+  - reference: "來源:PortSwigger Top10 2024 #5/#7;iThome news/167513 榜單。修復方向:sanitizer 鎖版+配置 review、CSP 兜底、文件渲染沙域隔離。"

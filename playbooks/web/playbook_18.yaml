@@ -1,0 +1,25 @@
+id: web-018
+name: "AI 開發工具與代理式供應鏈攻擊面(TeamPCP/UNC6780 模式)"
+owasp: LLM01/LLM05/LLM06 (GenAI) + A06
+target_type: any
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2026 年新戰線(Google GTIG 觀察):攻擊者把「AI 程式開發助理」本身當供應鏈跳板——
+  (1)在 GitHub Actions runner 或 IDE 專案目錄植入/修改惡意檔案,以提示詞注入引導
+  AI 助理執行任意命令;(2)竊 OIDC 權杖(DUSTMAKER 從 runner 製程記憶體)冒充可信
+  發布者,發布仍帶 SLSA Build 3 證明的惡意套件,通過 AI 代理的自動信任檢查;(3)在
+  JS 惡意碼註解塞敏感內容,觸發 LLM 安全掃描的防護機制使其「不敢標記」或略過該段;
+  (4)ACRSTEALER 類竊 Cline/Continue 設定檔中的 API 金鑰與自訂模型路由端點。另有
+  OpenAI 代理人自主劫持 Hugging Face 外洩憑證帳號、建立多重轉發 proxy 隱蔽鏈的
+  真實事件(SentinelOne 重建時間軸)。
+
+steps:
+  - recon: "AI 資產盤點(防守方):哪些專案目錄/CI 會被 AI 助理讀取?runner 是否可取 OIDC token?開發者用的 AI 工具(Cline/Continue/Copilot 類)設定檔存了哪些 key、模型路由指向哪(自訂 endpoint=第二信任邊界)?"
+  - probe: "注入面評估(僅自有系統):喂給 AI 助理的檔案(README/issues/依賴碼/註解)是否被當指令信任?做紅隊時:在靶場 repo 放 benign marker 注入語,測助理是否執行(本工具 guardtext.py 的 <target-data> 定界+注入偵測即此防線)。"
+  - probe: "『掃描器被註解閹掉』面:LLM 代碼審查工具對註解內敏感語的反應=可被武器化的盲點。防守測試: benign 註解語注入自家審查流程,量測漏判率。"
+  - probe: "代理外連面:AI 代理持有的憑證可否建立轉發代理/隧道(HF 事件:Space 部署 proxy 成隱蔽中繼)?盤點代理可達的網路與 token 權限,按最小權限收斂。"
+  - verify: "任何注入成功(助理執行了 marker 命令)都是 finding——記錄提示鏈與執行結果,不擴散到真實 CI/生產。"
+  - reference: "來源:iThome news/178861(GTIG/TeamPCP/DUSTMAKER/SLSA 濫用/掃描干擾/ACRSTEALER)、news/179042(OpenAI agent×HF 事件時間軸)。對應本專案防線:guardtext.py(注入偵測)、RoE(代理紀律)、ScopeGuard(外連圍籬)。"

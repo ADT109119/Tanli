@@ -1,0 +1,21 @@
+id: web-010
+name: "OAuth 非Happy Path 三連擊:Cookie Tossing / 流程劫持 / ATO(2024 Top10 #8/#10)"
+owasp: A07/A02
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  合併 2024 Top10 兩項 OAuth 手法:#10「Hijacking OAuth flows via Cookie Tossing」
+  (Elliot Ward)——利用子網域 cookie 域設定缺陷,把污染 cookie 塞進 .example.com,
+  中毒 RP 把 attacker 值帶進 OAuth state/redirect 流程;#8「OAuth Non-Happy Path
+  to ATO」(Oxrz)——錯誤頁、回調失敗分支、token 交換邊角案例中的帳號接管鏈。
+
+steps:
+  - recon: "映射 OAuth 流端點(authorize/token/redirect_uri 處理器/錯誤頁)與其 cookie 使用:哪些 cookie 進入 state/nonce/PKCE 校驗?子網域 cookie 域是否過寬(可被投遞)?"
+  - probe: "Cookie Tossing 暴露面(被動):檢查站方是否讀取同名 cookie 的首值/末值、是否信任 domain=.tld 的可寫入欄位(如 CSRF token 名重複)。不實際投遞,僅記錄可投遞面。"
+  - probe: "Non-happy path 清單:redirect_uri 不匹配時的錯誤處理是否洩漏 code/token?state 缺失/重複使用的分支?token 錯誤回應是否回顯請求參數?錯誤頁是否可反射?"
+  - probe: "_account linking 缺陷:已登入 A 帳號時走完 B 帳號的社交登入,是否把 B 綁進 A(永久 ATO)?此為 Oxrz 研究核心鏈之一,僅做理論盤點,實際驗證需 RoE 放行。"
+  - verify: "任何發現以『理論路徑 + 端點證據』記錄;涉及真實帳號操作(註冊/綁定/登入)的步驟一律標 pending-approval 不執行。"
+  - reference: "來源:PortSwigger Top10 2024 #8/#10;iThome news/167513 榜單。修復方向:strict-origin cookie、PKCE 強制、state 一次性、錯誤分支去敏感。"

@@ -1,0 +1,21 @@
+id: web-016
+name: "硬編碼簽章金鑰與權杖偽造(Issabel CVE-2026-89026 模式)"
+owasp: A07/A05
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2026-09 真實事件:開源 PBX 平台 Issabel 的 pbxapi/index.php 內含「所有安裝實例共用」
+  的硬編碼 HS256 JWT 簽章金鑰(CVE-2026-89026, CVSS 9.8),未經驗證者偽造權杖直Call
+  管理端點 manager/originate 達 OS 指令執行,且 9/9 已觀察到實際利用。模式:開源產品把
+  secret 寫死在 repo → 補 commit 公開日就是所有未更新站點的淪陷日。對「用開源套件的
+  管理後台」這一大類都適用。
+
+steps:
+  - recon: "識別開源管理後台指紋(登入頁標題、favicon、預設路徑、版本洩漏路徑)。對開源產品:查其 repo 中 secret/jwt/hs256 關鍵字的 commit 歷史——硬編碼金鑰是公開情報,不需從目標取得。"
+  - probe: "JWT 防線評估(僅分析自己收到的 token):alg=none 接受?HS256 且金鑰=產品預設值/常見弱金鑰?kid 可注入路徑?公開情報比對:產品預設金鑰是否仍在用(以『偽造 token 呼叫一個只讀端點是否回 401 之外狀態』判定——若放行即 critical,停手回報)。"
+  - probe: "同族檢查:API key 寫死在 JS bundle、預設管理口令、.git 洩漏出的 config 金鑰。任何金鑰只要可能來自公開 repo,視為全站共用。"
+  - verify: "確認『偽造可行』只需最小證據(如取得一個只讀管理端點的 200),嚴禁呼叫寫入/指令執行端點。命中 = deconfliction 級事件,立即上報。"
+  - reference: "來源:iThome news/179036(2026-09-15 VulnCheck 公告,Shadowserver 實際利用)。通用修復:unique-per-install 金鑰生成、移除預設 secret、JWT 用 RS256 + kid 白名單。"

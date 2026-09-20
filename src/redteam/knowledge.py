@@ -109,13 +109,15 @@ def _from_method(pb: dict, src: str) -> PlaybookDoc:
                 for k, v in item.items():
                     steps.append({"kind": "method", "name": str(k),
                                   "detail": ", ".join(map(str, v)) if isinstance(v, list) else str(v)})
+    own = str(pb.get("summary") or "").strip()  # 劇本自帶摘要必須入庫(可搜尋)
+    tail = (f"方法論劇本(不直接執行;執行走掃描器管線)。"
+            f"side_effect_free={pb.get('side_effect_free', '未宣告')}")
     return PlaybookDoc(
         id=str(pb.get("id", src)), name=str(pb.get("name", "")),
         owasp=str(pb.get("owasp", "")), target_type=str(pb.get("target_type", "")),
         phase=str(pb.get("phase", "")),
         payload_policy=str(pb.get("payload_policy", "methodology-only")),
-        summary=f"方法論劇本(不直接執行;執行走掃描器管線)。"
-                f"side_effect_free={pb.get('side_effect_free', '未宣告')}",
+        summary=f"{own} {tail}".strip(),
         steps=steps, source=src, executable=False)
 
 

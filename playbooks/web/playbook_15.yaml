@@ -1,0 +1,23 @@
+id: web-015
+name: "邊界設備 Pre-Auth RCE + 編譯期 Meta Programming(2019 Top10 #4/#8)"
+owasp: A01/A05
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  兩項「防禦邊界本身是攻擊面」的經典:#2019 #8「Infiltrating Corporate Intranet
+  Like NSA: Pre-Auth RCE on Leading SSL VPNs」(Orange Tsai + Meh Chang)——Pulse
+  Secure 用命令解析器錯誤 + 模板引擎把 STDERR 變後門;Fortinet 用 jemalloc 與應用
+  架構特性偽造 SSL 結構達 RCE(獲 Pwnie 年度最佳伺服器漏洞)。「產品加的防護層」
+  本身就是未審計的代碼面。#2019 #4「Abusing Meta Programming for Unauthenticated
+  RCE」(Orange Tsai,Jenkins)——Jenkins 只做 Pipeline「編譯」語法檢查、認為不執行就
+  安全,但 Groovy meta-programming 在編譯期即可 RCE:打破「不執行就沒有漏洞」迷思。
+
+steps:
+  - recon: "邊界設備識別:SSL VPN 入口(portal 指紋、登入頁特徵、pre-auth 可達端點清單)。設備型號/韌體從公開錯誤頁/預設路徑差異推斷,不信自報。"
+  - probe: "Pre-auth 面方法論(僅識不碰):解析器不一致(認證前輸入進入 shell/template/日誌)、錯誤訊息通道(STDERR/stack trace 是否可被控制影響流程)、記憶體管理特性(分配器重用)之暴露跡象。實際 PoC 超出任何正常 RoE,禁止。"
+  - probe: "『編譯≠安全』面:任何接受使用者程式碼/設定 DSL 並做 parse/compile/Lint 的功能(Jenkins Pipeline、YAML/AML 解析、模板預覽、正則回測)都是 attack surface。Groovy/Python eval 在編譯期的鉤子(metaClass、__init_subclass__)可執行。"
+  - verify: "對照實驗:僅提交語法錯誤 vs 提交含 meta 鉤子的語法正確碼,觀察 side effect(延遲/回連/日誌)差異。所有回連走 allowed_out_of_band 白名單。"
+  - reference: "來源:PortSwigger Top10 2019 #4/#8;iThome news/136109(含 Pulse Secure STDERR 後門與 Fortinet jemalloc 細節)。啟示:安全邊界≠免檢區;邊界設備是網路進入點,發現即 deconfliction 上報。"

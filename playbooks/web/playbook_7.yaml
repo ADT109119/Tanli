@@ -1,0 +1,23 @@
+id: web-007
+name: "Semantic Confusion Attacks — Apache 模組語意歧異(2024 Top10 #1)"
+owasp: A03/A05
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  源自 PortSwigger Top 10 Web Hacking Techniques 2024 第 1 名「Confusion Attacks:
+  Exploiting Hidden Semantic Ambiguity in Apache HTTP Server」(Orange Tsai/DEVCORE,
+  Black Hat USA 2024)。Apache 模組化架構近 30 年,各模組由不同開發者實作、互不了解
+  彼此實作細節卻被要求協作,對同一欄位(路徑/網址/handler)的理解不一致,形成全新攻擊面
+  (共通報 9 個漏洞)。要旨:不是單一模組有 bug,而是模組間的「語意縫隙」。
+
+steps:
+  - recon: "指紋確認 Apache 與其模組堆疊:mod_rewrite、mod_alias、mod_proxy、mod_php、HTTP/2 模組、前端反代組合。從 Server 標頭、錯誤頁、行為差異推斷啟用的模組(不依賴自報版本)。"
+  - probe: "Filename Confusion — 同一 URL 中,不同模組對『路徑 vs 檔名』的解析不一致:尾端 %20/%09、多重斜線、..;/、編碼差異在 rewrite/alias/proxy 鏈上的最終檔名認定是否分歧。以 GET 回應差異(200/403/404/源碼洩漏)觀察。"
+  - probe: "DocumentRoot Confusion — alias/DocumentRoot 邊界在多層 rewrite 後是否可穿越到預設根之外的目錄;構造路徑使前端 alias 判斷與後端檔案解析落在不同檔案。"
+  - probe: "Handler Confusion — 尋找會「順手修改對自身不重要、但對其他模組關鍵」欄位的模組(如 handler 指派),使靜態檔被當腳本執行或腳本被當靜態檔回傳源碼。觀察 Content-Type 與回應內容是否源碼外洩。"
+  - verify: "以『同請求打前端直連 vs 繞過前端』雙路徑對照,任何 200/403 反轉皆為不一致候選;重複兩次確認穩定性,排除快取噪訊。"
+  - poc: "記錄原始請求、兩端最終解析結果的差異對照表、最小重現請求。高影響(源碼洩漏/RCE)立即停手回報(deconfliction)。"
+  - reference: "來源:PortSwigger Top10 2024 #1;iThome 報導 news/167514(臺灣專家三度稱霸第一)、news/167513。研究思路:站在架構層視角問『為什麼會不一致』。"

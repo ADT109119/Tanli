@@ -1,0 +1,21 @@
+id: web-011
+name: "Web Cache Deception / Poisoning(2019 Top10 #1 + 2024 Top10 #9)"
+owasp: A05
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  快取線兩代手法:#2019 #1「Cached and Confused: Web Cache Deception in the Wild」
+  (Arshad et al.,基於 Omer Gil 2017)在 Alexa Top 5000 實證 5 種欺騙變體;
+  #2024 #9「ChatGPT Account Takeover — Wildcard Web Cache Deception」(Harel)把
+  通配路徑(如 /cdn-cgi/、靜態副檔名規則)變成可把動態頁面寫進 CDN 快取的橋梁,
+  直接 ATO。核心:應用路由認為是動態頁、CDN 靜態規則認為是靜態檔。
+
+steps:
+  - recon: "繪製快取層:CDN provider 指紋(cf-ray、x-cache、via)、靜態副檔名/路徑白名單、query-string 快取鍵規則、Set-Cookie 是否被快取(致命組合)。"
+  - probe: "Deception 變體目錄(全部為 GET 讀取、命中即停,不得讓敏感頁實際落地快取):副檔名偽裝(/account.css、/profile.jpg)、雙重副檔(.php.jpg)、路徑遍歷到靜態規則、%2e%2e/;jsessionid、無效 UTF-8 截斷、目錄偽裝(/account/.css/..%2f)。2024 wildcard 變體:尋找站方/CDN 的通配規則(如 /cdn-cgi/、/_next/static/../)使動態回應命中靜態快取鍵。"
+  - verify: "判定『快取了敏感內容』以無 cookie 的第二請求回看 x-cache: HIT + 含本人敏感標記即中招;確認後立刻記錄並停止,不重複拉取,通知站方清快取(deconfliction)。"
+  - probe: "Poisoning 理論面(不主動投遞):Vary 頭缺失、未淨化的 header 反射進快取鍵(unkeyed input)、cache key 正規化不一致。僅盤點暴露面。"
+  - reference: "來源:PortSwigger Top10 2019 #1 / 2024 #9;iThome news/136109、news/167513。修復方向:動態路徑禁快取、CDN 靜態規則白名單化、敏感端點 Cache-Control: no-store。"

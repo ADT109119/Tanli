@@ -1,0 +1,23 @@
+id: web-017
+name: "CVE 揭露後的探測窗口與邊界設備記憶體破口(GitLab/PAN-OS 模式)"
+owasp: A01/A06
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2026-09 兩起事件的共同課:#1 GitLab CVE-2026-85706(未Auth路徑穿越讀任意檔,CVSS
+  10)——公開隔天 watchTowr 蜜罐即觀察到探測。#2 Palo Alto PAN-OS CVE-2026-0310
+  (XML 處理記憶體緩衝溢位,未Auth可達管理/dataplane 介面,實體機 root RCE)——原廠
+  要求 Urgency Highest。模式:(a) CVE 公開→探測的窗口以「天」甚至「小時」計,防守方
+  必須假設已被掃描;(b) 防火牆/邊界設備自身的解析器(XML/日誌/管理 API)就是 pre-auth
+  攻擊面,「它在保護你」不等於「它沒有洞」。
+
+steps:
+  - recon: "對目標做『已被探測』跡盤點(防守視角):公開 CVE 對應產品是否在棧上(指紋推斷,不信自報)、管理介面是否可從外部抵達(本應內網限縮的 panel 暴露=立即 finding)。"
+  - probe: "路徑穿越族(GET 讀取、限定非敏感存在性證據):GitLab 模式——repository commits API 的路徑限制不完整+缺 authz 檢查,尋找同型:「API 收 path 引數→直接拼到檔案系統」的端點清單(靜態分析公開源碼即可,不碰生產)。"
+  - probe: "XML 面清單:哪些入口接受 XML(soap/atom/SSO SAML/日誌上傳/設定匯入)?每個入口 = 解析器記憶體破口候選 + XXE 候選。用無害 XML 觀察解析差異(延遲/錯誤碼),不投遞惡意實體。"
+  - verify: "修補驗證(防守方):比對版本行為差異(已修端點回 404/403 而非 500),或以廠商官方檢測腳本;蜜罐/探測日誌比對 KEV+EPSS 高風險 CVE 清單(本工具 cve_lookup 已接 EPSS/KEV)。"
+  - note: "本劇本僅做暴露面盤點與修補驗證;對未修補邊界設備的任何主動利用在多數 RoE 下明確禁止。"
+  - reference: "來源:iThome news/178892(GitLab CVSS 10+隔天探測)、news/178909(PAN-OS XML pre-auth,實體 root/VM DoS 差異)。啟示:修補優先級 = EPSS×KEV×暴露面,本工具 triage 公式已內建。"

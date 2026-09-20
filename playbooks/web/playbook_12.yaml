@@ -1,0 +1,22 @@
+id: web-012
+name: "路徑正規化與解析器邏輯攻擊(2018 Top10 #1)"
+owasp: A01/A05
+target_type: web_service
+phase: recon
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2018 #1「Breaking Parser Logic! Take Your Path Normalization Off and Pop 0days
+  Out」(Orange Tsai, Black Hat/DEF CON 2018)。路徑正規化被視為已解決的問題,但多層
+  架構(反代→框架→應用)中每層各自正規化,疊加後產生不一致:Nginx 認為 /..;/ 是正常
+  路徑、Tomcat 認為是上層目錄——安全檢查在 A 層通過、在 B 層被繞過。在 Spring
+  Framework、Ruby on Rails、Nginx/Tomcat 組合挖出大量零時差。Java 反代架構(大型
+  企業/政府/銀行)為高危族。
+
+steps:
+  - recon: "確認多層棧:反代產品與版本、後端語言框架(Java/Spring、Rails、ASP.NET)、路徑前綴剝離規則。指紋法:404 頁風格差異、Set-Cookie 域、JSESSIONID/_rails 線索。"
+  - probe: "不一致向量目錄(GET 觀察最終路由落點):..;/ 與 ;(分號參數)、雙寫 ///、%2f/%252f 雙重編碼、URL 編碼差異(前層解、後層不解)、大小寫路徑(Windows 後端)、尾端 . 與空白。對照『安全規則命中的路徑』vs『實際送達後端的路徑』。"
+  - verify: "以公開可區分的兩端點做對照實驗:某路徑在反代 ACL 判為公開、後端卻送達受保護資源(或反之)。任何 ACL 繞過證據立即停止該路徑族。"
+  - note: "SSRF 的 URL 解析不一致同脈絡(2017 #1 SSRF 新方法):協議解析器對 @ 、#、\\ 的認知分歧可繞過內網黑名單。與 web-007(Apache 模組混淆)互為參照——同一『不一致』世界觀的不同切片。"
+  - reference: "來源:PortSwigger Top10 2018 #1;iThome news/129314(二連霸報導,含 Nginx/Tomcat /..;/ 案例)。"

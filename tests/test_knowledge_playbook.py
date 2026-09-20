@@ -56,7 +56,7 @@ def test_web006_methodology_has_steps(lib):
 
 def test_search_by_owasp_and_keyword(lib):
     hits = search(lib, owasp="LLM01")
-    assert [d.id for d in hits] == ["llm-001"]
+    assert "llm-001" in [d.id for d in hits]  # web-018(GenAI 供應鏈)亦屬 LLM01 族
     hits = search(lib, query="jailbreak")
     assert any(d.id == "llm-001" for d in hits)
     hits = search(lib, query="sql")

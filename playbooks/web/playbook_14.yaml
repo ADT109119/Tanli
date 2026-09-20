@@ -1,0 +1,20 @@
+id: web-014
+name: "UI Redressing 新世代:DoubleClickjacking(2024 Top10 #6)"
+owasp: A05
+target_type: web_service
+phase: verify
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  2024 #6「DoubleClickjacking: A New Era of UI Redressing」(Paulos Yibelo)。X-Frame-
+  Options/CSP frame-ancestors 防住了傳統 clickjacking,但「雙擊」是全新互動:
+  攻擊者把目標按鈕(如「同意條款」「開啟權限」)對齊到自身頁面兩次點擊的落點,
+  dblclick 事件繞過了只防單擊的防線與許多一次性 token 設計。UI redressing 從
+  frame 嵌入問題擴展為『事件層』問題。
+
+steps:
+  - recon: "盤點站方敏感操作是否只靠單擊防護:同意/授權/支付/刪除按鈕的防範(clickjack 框架遮罩?)、有無 dblclick 監聽器(前端 bundle 搜尋)、frame-ancestors 覆蓋範圍。"
+  - probe: "理論暴露面(純被動):目標關鍵按鈕是否可被外站以透明 overlay 對齊(無 busting 的 iframe 或 window.open)、按鈕是否在 dblclick 兩次都觸發同一動作(第二次未去重)。"
+  - verify: "以文字描述攻擊鏈即可立 finding(UI 對齊可行性 + 事件模型證據),嚴禁在真實站點實作惡意頁面;需要 POC 時在本地靶場重現。"
+  - reference: "來源:PortSwigger Top10 2024 #6;iThome news/167513 榜單。修復方向:關鍵操作二次確認走伺服器端、敏感按鈕要求 focus/engagement 信號、dblclick 去重、window.open 限制。"
