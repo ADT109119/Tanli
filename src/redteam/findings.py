@@ -161,6 +161,9 @@ class Finding:
     source: str = ""  # which scanner/step produced it
     owasp: str = ""  # OWASP 2021 class (A01-A10) or LLMxx for llm surface (P1)
     cvss_vector: str = ""  # CVSS v3.1 自動評分向量(info 為空)
+    #: 實際擷取到的資料片段(如 nuclei extracted-results);
+    #: 經 ReportGenerator.attach_exfil 自動進報告 §3,不再只留在 evidence 字串
+    extracted: list[str] = field(default_factory=list)
 
 
 def _new_id(counter: list[int], source: str) -> str:
@@ -177,6 +180,16 @@ def from_nuclei(findings_out: list[dict], counter: list[int]) -> list[Finding]:
         sev = NUCLEI_SEV.get(str(raw_sev).lower(), "info")
         matched = f.get("matched-at", "")
         owasp = map_nuclei_to_owasp(info)
+        # extracted-results:nuclei 模板 extractor 抓到的真實資料(exposed-config/
+        # secrets 類)。保留 list 原貌進 Finding.extracted → §3 逐筆登錄,
+        # evidence 仍放拼接字串供 judge 二審(向後兼容)。
+        # 型別防禦(jsonl 變體可能給字串/單一值):不可迭代值一律包成單元素清單。
+        extracted_raw = f.get("extracted-results")
+        if extracted_raw is None:
+            extracted_raw = []
+        elif isinstance(extracted_raw, str) or not isinstance(extracted_raw, (list, tuple)):
+            extracted_raw = [extracted_raw]
+        extracted = [str(x) for x in extracted_raw if str(x).strip()]
         finding = Finding(
             id=_new_id(counter, "nuclei"),
             attack_surface="web",
@@ -188,9 +201,10 @@ def from_nuclei(findings_out: list[dict], counter: list[int]) -> list[Finding]:
             poc=f"# re-run: nuclei -t <template> -u {matched}",
             confidence=0.9 if sev in ("high", "critical") else 0.6,
             fp_risk="low" if f.get("type") == "regex" else "medium",
-            evidence=f.get("extracted-results", "") or "",
+            evidence=" | ".join(extracted) or "",
             source="nuclei",
             owasp=owasp,
+            extracted=extracted,
         )
         out.append(finding)
     return out

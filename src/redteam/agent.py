@@ -210,6 +210,16 @@ class AgentTools:
                         "direct", "low_priv", "auth_required",
                         "user_interaction", "internal_only"],
                         "description": "how reachable the flaw is for an attacker"},
+                    "exfiltrated_data": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": ("Verbatim snippets of sensitive data you LITERALLY "
+                                        "captured from the target in earlier tool output "
+                                        "(secret/config lines, PII, dumped rows). Each entry "
+                                        "is redacted and listed in the report's formal "
+                                        "'偷到的資料' section. Copy only text you actually "
+                                        "observed — never paraphrase, never invent. Omit "
+                                        "when nothing was actually extracted."),
+                    },
                 },
                 "required": ["title", "severity", "description", "evidence"],
             },
@@ -434,9 +444,13 @@ Method rules (mandatory):
 5. Record each real observation via add_finding with concrete evidence. Severity must
    match CVSS/impact. Never fabricate probe results; if a tool is unavailable or a
    probe is blocked, say so honestly.
-6. Stay inside the authorized scope; prefer read-only observation. You have a hard
+6. If a probe returned LITERAL sensitive data (a secret/config line, PII, dumped
+   records), pass those exact snippets in add_finding.exfiltrated_data so they land in
+   the report's formal extracted-data section. Only copy text you actually saw in tool
+   output — never guess or paraphrase; omit the field when nothing was extracted.
+7. Stay inside the authorized scope; prefer read-only observation. You have a hard
    probe budget and a token budget.
-7. When you have exhausted reasonable checks (or budget), call finish with a summary.
+8. When you have exhausted reasonable checks (or budget), call finish with a summary.
 """ + GUARD_RULE + """
 Keep working notes via write_note for anything worth carrying to a next session.
 Think step by step; one tool call per message."""
@@ -502,6 +516,9 @@ class AgentFinding:
     triage_score: float = -1.0
     triage_factors: dict = field(default_factory=dict)
     kev: bool = False
+    #: LLM 經 add_finding.exfiltrated_data 登錄的實際擷取片段(逐字觀測物),
+    #: 報告生成時經 Finding.extracted → attach_exfil 進 §3(自動脫敏)
+    exfiltrated: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -573,6 +590,19 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                               confidence=float(args.get("confidence", 0.6)),
                               cve_epss=epss_val, kev=kev_hit,
                               reachability=str(args.get("reachability", "direct")))
+            # exfiltrated_data:LLM 逐字登錄的真實擷取物 → AgentFinding.exfiltrated
+            # → 報告 Finding.extracted → attach_exfil 進 §3(自動脫敏)。
+            # 上限 10 筆、單筆 500 字,防 bulk dump 灌進報告。
+            # 型別防禦(agy review):LLM 可能吐出 int/bool/dict 等非清單值,
+            # 一律包成單元素清單,絕不迭代非可迭代物件(防擊垮 agent loop)。
+            exfil_in = args.get("exfiltrated_data")
+            if exfil_in is None:
+                exfil_raw: list[Any] = []
+            elif isinstance(exfil_in, (list, tuple)):
+                exfil_raw = list(exfil_in)
+            else:
+                exfil_raw = [exfil_in]
+            exfil = [str(x)[:500] for x in exfil_raw if str(x).strip()][:10]
             f = AgentFinding(
                 title=str(args.get("title", ""))[:200],
                 severity=str(args.get("severity", "info")).lower(),
@@ -582,13 +612,16 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                 cve=cve_arg,
                 confidence=float(args.get("confidence", 0.6)),
                 triage_score=tr.score, triage_factors=tr.factors, kev=kev_hit,
+                exfiltrated=exfil,
             )
             result.findings.append(f)
             obs = ToolResult(True, {"recorded": f.title,
-                                    "triage": tr.as_dict()})
+                                    "triage": tr.as_dict(),
+                                    "exfil_logged": len(exfil)})
             if console:
                 console.print(f"    [green]✎ finding: {f.title} ({f.severity}"
-                              f" | triage {tr.score})[/]")
+                              f" | triage {tr.score}"
+                              f"{f' | exfil×{len(exfil)}' if exfil else ''})[/]")
         elif tool == "finish":
             result.finished = True
             s = str(args.get("summary", "")).strip() or thought.strip()

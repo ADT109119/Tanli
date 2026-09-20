@@ -62,6 +62,82 @@ def test_loop_records_findings_and_finishes(tools):
     assert all("tool" in t for t in res.transcript)
 
 
+def test_add_finding_exfiltrated_data_plumbing(tools):
+    """add_finding.exfiltrated_data → AgentFinding.exfiltrated(exfil 閉環第一段)。
+
+    清洗規則:字串容錯包成 list、單筆截 500 字、總量截 10 筆、空值丟棄。
+    """
+    brain = FakeBrain([
+        {"thought": "拖到資料", "tool": "add_finding",
+         "args": {"title": "leak", "severity": "critical",
+                  "description": "d", "evidence": "e",
+                  "exfiltrated_data": ["secret-line-1", "secret-line-2"]}},
+        {"thought": "字串變體+超長", "tool": "add_finding",
+         "args": {"title": "leak2", "severity": "high",
+                  "description": "d", "evidence": "e",
+                  "exfiltrated_data": "solo-string-" + "x" * 600}},
+        {"thought": "未登錄", "tool": "add_finding",
+         "args": {"title": "clean", "severity": "low",
+                  "description": "d", "evidence": "e"}},
+        {"thought": "done", "tool": "finish", "args": {"summary": "ok"}},
+    ])
+    res = run_agent(tools, brain, goal="test", max_steps=10)
+    assert res.findings[0].exfiltrated == ["secret-line-1", "secret-line-2"]
+    # 字串容錯 + 500 字截斷
+    assert len(res.findings[1].exfiltrated) == 1
+    assert len(res.findings[1].exfiltrated[0]) == 500
+    # 未登錄 → 空清單(§3 渲染走「未登錄」明示路徑)
+    assert res.findings[2].exfiltrated == []
+
+
+def test_add_finding_exfiltrated_data_over_cap(tools):
+    """超過 10 筆只留前 10 筆(防 bulk dump 灌進報告)。"""
+    brain = FakeBrain([
+        {"thought": "dump", "tool": "add_finding",
+         "args": {"title": "bulk", "severity": "high", "description": "d",
+                  "evidence": "e",
+                  "exfiltrated_data": [f"row-{i}" for i in range(25)]}},
+        {"thought": "done", "tool": "finish", "args": {"summary": "ok"}},
+    ])
+    res = run_agent(tools, brain, goal="test", max_steps=10)
+    assert len(res.findings[0].exfiltrated) == 10
+    assert res.findings[0].exfiltrated[0] == "row-0"
+
+
+def test_agent_report_bridging_exfil_to_section3(tools):
+    """閉環端到端(離線):add_finding 登錄 → Finding.extracted →
+    attach_exfil → 報告 §3 逐字出現且 sk- 金鑰自動遮罩。"""
+    from redteam.findings import Finding as SFinding
+    from redteam.report import ReportGenerator
+
+    brain = FakeBrain([
+        {"thought": "拿到假金鑰", "tool": "add_finding",
+         "args": {"title": "env leak", "severity": "critical",
+                  "description": "d", "evidence": "GET /.env 200",
+                  "exfiltrated_data": [
+                      'API_KEY="sk-live0000000000000000000000abcd1234"',
+                      "canary=REDTEAM_EXFIL_CANARY_9f3a"]}},
+        {"thought": "done", "tool": "finish", "args": {"summary": "ok"}},
+    ])
+    res = run_agent(tools, brain, goal="test", max_steps=10)
+    # 模擬 cli agent 命令的報告橋接(同構代碼,不依賴 Typer runner)
+    report = ReportGenerator("http://127.0.0.1:9/", "hybrid")
+    for i, f in enumerate(res.findings, 1):
+        report.add_finding(SFinding(
+            id=f"agent-{i:02d}", attack_surface="hybrid", category=f.category,
+            severity=f.severity, title=f.title, description=f.description,
+            steps=["autonomous agent loop"], poc=f.evidence[:1500] or None,
+            confidence=f.confidence, evidence=f.evidence[:2000], source="agent",
+            extracted=list(getattr(f, "exfiltrated", None) or []),
+        ))
+    n = report.attach_exfil()
+    assert n == 2
+    sec3 = report.render().split("## 3.", 1)[1].split("## 4.", 1)[0]
+    assert "REDTEAM_EXFIL_CANARY_9f3a" in sec3
+    assert "sk-live****1234" in sec3
+    assert "0000000000000000000000" not in sec3
+
+
 def test_readonly_blocks_post(tools):
     brain = FakeBrain([
         {"thought": "試著 POST", "tool": "http_request",

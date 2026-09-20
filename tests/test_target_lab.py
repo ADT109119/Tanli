@@ -87,6 +87,26 @@ def test_unknown_path_404():
             assert e.code == 404
 
 
+def test_canary_leaks_on_vulnerable_face():
+    """vulnerable /canary 回虛構機密(假 sk- 金鑰 + 哨兵)供 exfil 閉環驗證。"""
+    with TargetLab(behavior="vulnerable") as lab:
+        _, _, body = _get(lab.base_url + "/canary")
+        assert "REDTEAM_EXFIL_CANARY_9f3a" in body
+        assert "sk-demo" in body  # 假金鑰:redact 遮罩測試的錨點
+
+
+def test_canary_blocked_on_hardened_face():
+    """hardened /canary 必須 403 —— 典範目標不存在資料擷取路徑。"""
+    import urllib.error
+
+    with TargetLab(behavior="hardened") as lab:
+        try:
+            urllib.request.urlopen(lab.base_url + "/canary", timeout=5)
+            assert False, "should raise HTTPError"
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+
+
 def test_stop_releases_port():
     """stop() 後原 port 應已釋放(可重新 bind 成功)。"""
     lab = TargetLab()

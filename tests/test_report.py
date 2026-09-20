@@ -87,3 +87,99 @@ def test_remediation_dedup_and_generic():
     sec6 = out.split("## 6. 修復建議", 1)[1]
     assert "f-a, f-b" in sec6          # 去重彙整
     assert "重掃回歸確認閉合" in sec6   # 通用建議兜底
+
+
+def _sec3(text: str) -> str:
+    return text.split("## 3.", 1)[1].split("## 4.", 1)[0]
+
+
+def test_exfil_section_empty_placeholder():
+    # 未登錄擷取物時 §3 必須明示「未登錄」,而不是留白(舊版死碼的症狀)
+    out = _gen([_mk("f-x", "low", "info_disclosure", "A05")])
+    sec3 = _sec3(out)
+    assert "(本次評估未登錄實際擷取資料)" in sec3
+    assert "**Achieved:**" in sec3 and "- (無)" in sec3
+
+
+def test_attach_exfil_closes_loop_with_redaction():
+    # exfil 閉環:finding.extracted → attach_exfil → §3 逐字出現且自動脫敏
+    f = _mk("f-e", "high", "info_disclosure", "A05")
+    f.extracted = [
+        'api_key = "sk-demo0000000000000000000000001234"',
+        "exfil_canary = REDTEAM_EXFIL_CANARY_9f3a",
+    ]
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    r.add_finding(f)
+    n = r.attach_exfil()
+    assert n == 2
+    # 冪等:重複調用不重複登錄
+    assert r.attach_exfil() == 0
+    sec3 = _sec3(r.render())
+    assert "REDTEAM_EXFIL_CANARY_9f3a" in sec3
+    assert "sk-demo****1234" in sec3          # sk- 金鑰中段遮罩
+    assert "00000000000000000000000" not in sec3
+
+
+def test_add_exfil_direct_still_works():
+    # 直接調用 add_exfil(掃描器以外來源/手工登錄)通道不變
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    r.add_exfil("Bearer abcdefghijklmnop")
+    sec3 = _sec3(r.render())
+    assert "Bearer ****" in sec3
+    assert "ijklmnop" not in sec3
+
+
+def test_attach_exfil_explicit_findings_arg():
+    # 可傳入尚未 add_finding 的清單(例如 triage 前預登錄)
+    f = _mk("f-y", "high", "sqli", "A03")
+    f.extracted = ["row: alice|secret-a"]
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    assert r.attach_exfil([f]) == 1
+    assert "row: alice|secret-a" in _sec3(r.render())
+
+
+def test_redact_hardened_patterns():
+    """redact 硬化回歸(agy review P0-1):exfil 閉環後 redact 是安全關鍵路徑。"""
+    from redteam.report import redact
+
+    # 現代帶連字號金鑰:sk-proj- / sk-ant- 必須被遮罩(舊字元集漏掉它們)
+    out = redact("key=sk-proj-XXXXXXXXXXyyyyyyyyyyyyZZZZ1234 done")
+    assert "****" in out and "yyyyyyyyyyyy" not in out
+    out = redact("sk-ant-apiaaaa-BBBBccccDDDDeeeeFFFF1234")
+    assert "BBBBccccDDDDeeee" not in out
+    # Bearer:含 + / = 的 Base64 token 不得半遮半露
+    out = redact("Authorization: Bearer aaaaaaaa+bbbbbbbb==cccc")
+    assert "bbbbbbbb" not in out and "cccc" not in out
+    # Cookie:小寫標頭(HTTP/2)+ 多對值全部遮罩,只留非機密屬性
+    out = redact("cookie: a=1; session=TOPSECRET123; Path=/; HttpOnly; Secure")
+    assert "TOPSECRET123" not in out
+    assert "session=****" in out and "a=****" in out
+    assert "Path=/" in out and "HttpOnly" in out  # 屬性保留可讀
+    out = redact("Set-Cookie: sid=leakedvalue; Path=/; SameSite=Lax")
+    assert "leakedvalue" not in out and "SameSite=Lax" in out
+    # AKIA 回歸不破
+    assert "SECRET12345678" not in redact("AKIASECRET12345678")
+
+
+def test_add_exfil_dedup_strip_and_instance_mode():
+    """add_exfil 統一入口(agy review P1-4):去重+strip+沿用實例 redact_mode。"""
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    r.add_exfil("  secret-line  ")
+    r.add_exfil("secret-line")          # strip 後重複 → 不得二次登錄
+    assert len(r.exfiltrated) == 1
+    # redact_mode="full" 實例:手動登錄同樣不遮罩(策略不分裂)
+    rf = ReportGenerator("http://127.0.0.1/lab", "web_service", redact_mode="full")
+    rf.add_exfil("sk-live1234567890abcd")
+    assert "sk-live1234567890abcd" in rf.exfiltrated[0]
+    # --full 實例的 §3 標題必須如實宣告 UNREDACTED
+    body = rf.render()
+    assert "UNREDACTED" in body and "勿直接轉發" in body
+
+
+def test_exfil_markdown_backtick_escaping():
+    """含反引號的擷取片段不得提前閉合 code-span(agy review P2-7)。"""
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    r.add_exfil("SELECT * FROM `users`")
+    sec3 = _sec3(r.render())
+    assert "`` SELECT * FROM `users` ``" in sec3
+

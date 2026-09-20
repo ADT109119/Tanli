@@ -507,8 +507,19 @@ def _judge_and_report(target: str, results: dict[str, Any], *, config_path: str 
             triaged.append(f)
             console.print(f"  [cyan]= {f.id} {f.title} [deterministic(免 LLM 複核)][/]")
             continue
+        # exfil 證據一併送審(反幻覺:宣稱的擷取物必須逐字可核)。
+        # 預算控制(agy review):judge.confirm 對 evidence 有 [:2000] 硬截斷,
+        # 先削觀察證據到 1400,宣稱段限 5 筆×200 字,避免宣稱段被截半
+        # ——截碎片會與觀察證據 verbatim 比對失敗,真的漏洞被誤殺成幻覺。
+        obs_evidence = (f.evidence or "")[:1400]
+        claims = getattr(f, "extracted", None)
+        if claims:
+            claim_block = "\n".join(f"- {str(x)[:200]}" for x in claims[:5])[:500]
+            judge_evidence = f"{obs_evidence}\n\nExtracted data claimed:\n{claim_block}"
+        else:
+            judge_evidence = obs_evidence
         text = judge.confirm(
-            evidence=f.evidence,
+            evidence=judge_evidence,
             suspect=f"{f.title} ({f.category}) at {target}",
         )
         verdict = judge.verdict(text)
@@ -543,14 +554,22 @@ def _judge_and_report(target: str, results: dict[str, Any], *, config_path: str 
                 poc=f.poc,
                 confidence=f.confidence,
                 fp_risk=f.fp_risk,
-                owasp=getattr(f, "owasp", ""),  # P1: carry OWASP class into report
+                owasp=getattr(f, "owasp", ""),  # P1:carry OWASP class into report
                 # M6:帶上 CVSS(此前 convert_all 算好的分數在 bridge 處被丟棄,
                 # 報告永遠顯示 0.0 — 這是既有的接線 bug,一併修復)
                 cvss_score=getattr(f, "cvss_score", 0.0),
                 cvss_vector=getattr(f, "cvss_vector", ""),
+                # exfil 閉環:nuclei extracted-results 等真實擷取物隨 finding 過橋,
+                # 由下方 attach_exfil() 登錄進報告 §3
+                extracted=list(getattr(f, "extracted", None) or []),
             )
         )
+    report.attach_exfil()
+    n_exfil = len(report.exfiltrated)
     out = report.write()
+    if n_exfil:
+        console.print(f"[yellow]§3 偷到的資料:登錄 {n_exfil} 筆"
+                      f"{'(已自動脫敏;--full 可保留原樣)' if not full else '(--full:未脫敏!)'}[/]")
     # agy review:含高危自動評分時明確警示「未定稿」(防 CI 把草稿當正式報告發布;
     # exit code 保持 0 — 報告產出本身成功,門禁由狀態行與警示承擔)
     unreviewed = [f for f in triaged if (f.severity or "").lower() in ("high", "critical")]
@@ -815,11 +834,19 @@ def agent(
             steps=["autonomous agent loop"], poc=f.evidence[:1500] or None,
             confidence=f.confidence,
             evidence=f.evidence[:2000], source="agent", owasp="A06" if f.cve else "",
+            # agent 經 add_finding.exfiltrated_data 登錄的擷取物過橋 → §3
+            extracted=list(getattr(f, "exfiltrated", None) or []),
         )
         annotate_cvss([fd])
         report.add_finding(fd)
+    # exfil 閉環:把各 finding 的 extracted 逐筆登錄進 §3(自動走 redact 脫敏;
+    # 未傳 --full 時金鑰/JWT/Bearer 一律遮蔽)
+    n_exfil = report.attach_exfil()
     out = report.write()
     console.print(f"[bold green]Report: {out}[/]")
+    if n_exfil:
+        console.print(f"[yellow]§3 偷到的資料:登錄 {n_exfil} 筆"
+                      f"{'(已自動脫敏;--full 可保留原樣)' if not full else '(--full:未脫敏)'}[/]")
     ck = Path("state") / f"agent_transcript_{int(time.time())}.json"
     ck.parent.mkdir(exist_ok=True)
     ck.write_text(json.dumps(result.transcript, ensure_ascii=False, indent=1))
@@ -1026,6 +1053,45 @@ def self_test():
             has_vector and has_advice,
             "報告含 CVSS v3.1 向量與實質修復建議",
             f"向量={has_vector} 建議={has_advice}",
+        )
+
+        # 斷言 8:exfil 閉環 —— 靶場 /canary 真實擷取 → 報告 §3 逐字出現,
+        # 且假 sk- 金鑰被 redact 遮罩(auto 模式)。hardened 面 /canary 必須 403
+        # (典範目標無擷取路徑)。全離線、無 LLM:走 add_exfil 的確定性通道。
+        canary_body = ""
+        with TargetLab(behavior="vulnerable") as lab4:
+            r4 = RedTeamHTTP(guard=ScopeGuard(None)).request(
+                "GET", lab4.base_url + "/canary")
+            canary_body = (r4.body or b"").decode("utf-8", "replace")
+        exfil_report = ReportGenerator("http://127.0.0.1/self-test", "hybrid")
+        exfil_report.add_finding(
+            Finding(
+                id="f-exfil-01", attack_surface="web", category="info_disclosure",
+                severity="high", title="exfil 閉環驗證",
+                description="canary 擷取 → §3",
+                steps=["GET /canary"],
+                extracted=[canary_body],
+            )
+        )
+        n_logged = exfil_report.attach_exfil()
+        # 冪等:重複調用不得重複登錄
+        n_again = exfil_report.attach_exfil()
+        rendered_exfil = exfil_report.render()
+        sec3 = rendered_exfil.split("## 3.", 1)[-1].split("## 4.", 1)[0]
+        # /canary 的哨兵必須逐字進 §3;假金鑰中段必須被遮罩成 ****
+        # (canary 兩行 → attach_exfil 依行拆成 2 條登錄)
+        ok_canary = "REDTEAM_EXFIL_CANARY_9f3a" in sec3
+        ok_redact = "sk-demo****1234" in sec3 and "00000000000000000000000" not in sec3
+        ok_count = n_logged == 2 and n_again == 0
+        hardened_blocked = False
+        with TargetLab(behavior="hardened") as lab5:
+            r5 = RedTeamHTTP(guard=ScopeGuard(None)).request(
+                "GET", lab5.base_url + "/canary")
+            hardened_blocked = r5.status == 403
+        _check(
+            ok_canary and ok_redact and ok_count and hardened_blocked,
+            "exfil 閉環:擷取物進 §3 + 金鑰遮罩 + 冪等 + hardened /canary 403",
+            f"哨兵={ok_canary} 遮罩={ok_redact} 冪等={ok_count} 熔斷={hardened_blocked}",
         )
 
     if failures:

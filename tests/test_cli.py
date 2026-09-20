@@ -37,6 +37,39 @@ def test_self_test_covers_m6_assertions():
     assert "vulnerable LLM 靶場" in result.output
     assert "hardened LLM 靶場" in result.output
     assert "CVSS v3.1 向量與實質修復建議" in result.output
+    assert "exfil 閉環" in result.output
+
+
+def test_judge_and_report_bridging_exfil_to_section3(tmp_path, monkeypatch):
+    """掃描器橋接直測(agy review P2-6):nuclei extracted-results 經
+    _judge_and_report 真實代碼路徑必須進報告 §3(且 sk- 自動遮罩)。
+
+    若有人刪除/斷掉 cli.py 的 report.attach_exfil() 橋接,本測試必須變紅
+    (彌補「單元測試只測同構代碼」的盲區)。無 LLM key → 確定性路徑。
+    """
+    from redteam.cli import _judge_and_report
+
+    monkeypatch.chdir(tmp_path)
+    # hermetic:剝奪 judge key → 走確定性路徑,測試不打外部 LLM
+    for k in ("REDTEAM_JUDGE_API_KEY", "OPENAI_API_KEY", "REDTEAM_JUDGE_BASE_URL"):
+        monkeypatch.delenv(k, raising=False)
+    results = {
+        "nuclei": [{
+            "info": {"name": "Exposed .env", "severity": "high",
+                     "tags": ["exposure", "config"]},
+            "template-id": "t-env", "matched-at": "http://127.0.0.1/.env",
+            "extracted-results": [
+                'DB_PASSWORD="sk-db0000000000000000000000abcd5678"',
+                "canary=REDTEAM_EXFIL_CANARY_9f3a"],
+        }],
+    }
+    _judge_and_report("http://127.0.0.1", results)
+    reports = list(tmp_path.glob("report_*.md"))
+    assert len(reports) == 1
+    sec3 = reports[0].read_text().split("## 3.", 1)[1].split("## 4.", 1)[0]
+    assert "REDTEAM_EXFIL_CANARY_9f3a" in sec3
+    assert "sk-db00****5678" in sec3  # sk- 保留前4(db00)後4(5678)
+    assert "0000000000000000000000" not in sec3
 
 
 def test_run_help_lists_nuclei_limit_options():

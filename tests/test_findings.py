@@ -249,6 +249,38 @@ def test_from_nuclei_owasp_field():
     assert fs[0].owasp == "A03"
 
 
+def test_from_nuclei_extracted_results_to_extracted_field():
+    # nuclei extractor 抓到的真實資料必須進 Finding.extracted(list 原貌),
+    # 供 ReportGenerator.attach_exfil 登錄進報告 §3(exfil 閉環)
+    counter = [0]
+    fs = from_nuclei(
+        [{"info": {"name": "Exposed .env", "severity": "high",
+                   "tags": ["exposure", "config"]},
+          "template-id": "t-env", "matched-at": "http://x/.env",
+          "extracted-results": ["DB_PASSWORD=hunter2", "AWS_SECRET=abc123"]}],
+        counter,
+    )
+    assert fs[0].extracted == ["DB_PASSWORD=hunter2", "AWS_SECRET=abc123"]
+    # evidence 仍為拼接字串(judge 二審用,向後兼容)
+    assert "DB_PASSWORD=hunter2" in fs[0].evidence
+    assert "AWS_SECRET=abc123" in fs[0].evidence
+
+
+def test_from_nuclei_extracted_results_string_or_absent():
+    # extracted-results 可能是字串(jsonl 變體)或缺失,兩者都不得 crash
+    counter = [0]
+    fs = from_nuclei(
+        [{"info": {"name": "t", "severity": "info"}, "template-id": "x",
+          "matched-at": "http://x/", "extracted-results": "solo-value"},
+         {"info": {"name": "t2", "severity": "info"}, "template-id": "y",
+          "matched-at": "http://x/"}],
+        counter,
+    )
+    assert fs[0].extracted == ["solo-value"]
+    assert fs[1].extracted == []
+    assert fs[1].evidence == ""
+
+
 def test_from_sqlmap_owasp_field():
     counter = [0]
     fs = from_sqlmap({"raw": "GET param 'id' is vulnerable (boolean-based blind)"}, counter)

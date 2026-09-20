@@ -9,6 +9,8 @@ Web 端點(GET):
             Set-Cookie 缺 HttpOnly 與 Secure
   /secure - 200 HTML,帶齊上述安全頭,Set-Cookie 含 HttpOnly;Secure(正確示範)
   /sql    - 200,簡單 echo id 參數(留給未來 SQLi 探測,本里程碑不做注入)
+  /canary - vulnerable: 200 虛構「機密」(假 sk- 金鑰 + exfil 哨兵)供 §3 閉環驗證;
+            hardened:   403(典範目標無擷取路徑)
 
 LLM 端點(POST,M6):
   /v1/chat/completions - OpenAI 相容 chat completions,關鍵詞確定性行為:
@@ -123,6 +125,19 @@ class _LabHandler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             ident = qs.get("id", ["1"])[0]
             self._send(200, f"id={ident}", content_type="text/plain; charset=utf-8")
+        elif path == "/canary":
+            # 洩漏哨兵(self-test 斷言 8 專用):vulnerable 面回傳「機密」內容,
+            # 供 exfil 閉環驗證(canary 逐字進報告 §3、sk- 假金鑰被 redact 遮罩);
+            # hardened 面 403 —— 典範目標不存在資料擷取路徑。內容為虛構假值。
+            if self.behavior == "hardened":
+                self._send(403, "forbidden")
+            else:
+                self._send(
+                    200,
+                    'api_key = "sk-demo0000000000000000000000001234"\n'
+                    "exfil_canary = REDTEAM_EXFIL_CANARY_9f3a\n",
+                    content_type="text/plain; charset=utf-8",
+                )
         else:
             self._send(404, "not found")
 

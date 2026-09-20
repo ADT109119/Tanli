@@ -29,20 +29,46 @@ class Finding:
     cvss_score: float = 0.0
     owasp: str = ""  # OWASP 2021 class (A01-A10) or LLMxx for llm surface (P1)
     cvss_vector: str = ""  # CVSS v3.1 自動評分向量(由 cvss.annotate_cvss 填入)
+    #: 該 finding 實際擷取到的資料片段(nuclei extracted-results / agent 登錄),
+    #: render 時彙進 §3;由 ReportGenerator.attach_exfil 自動填充掃描器路徑
+    extracted: list[str] = field(default_factory=list)
+
+
+#: Set-Cookie 的屬性旗標(值非機密,遮蔽後可讀性優先);其餘 name=value 一律遮值
+_COOKIE_ATTR_KEYS = {"path", "domain", "samesite", "max-age", "expires"}
+
+
+def _mask_cookie_pairs(match: re.Match) -> str:
+    prefix, value = match.group(1), match.group(2)
+    masked = []
+    for pair in value.split(";"):
+        k, sep, _v = pair.partition("=")
+        if sep and k.strip().lower() not in _COOKIE_ATTR_KEYS:
+            masked.append(f"{k}=****")
+        else:
+            masked.append(pair)  # 旗標(Secure/HttpOnly)與已知屬性原樣保留
+    return prefix + ";".join(masked)
 
 
 def redact(data: str, mode: str = "auto") -> str:
-    """Spec §11 redaction: API keys/JWT/cookies masked. Disable with --full."""
+    """Spec §11 redaction: API keys/JWT/cookies masked. Disable with --full.
+
+    硬化(agy review 2026-09-21,exfil 閉環使 redact 成為安全關鍵路徑):
+    sk- 字元集涵蓋 sk-proj-/sk-ant- 等帶連字號金鑰;Bearer 支援完整
+    Base64 字元集(+/=);Cookie 大小寫不敏感且逐對遮蔽全部 name=value。
+    """
     if mode == "full":
         return data
-    # API key / token: keep first4 last4
-    data = re.sub(r"(sk-[A-Za-z0-9]{4})[A-Za-z0-9]+([A-Za-z0-9]{4})", r"\1****\2", data)
+    # API key / token: keep first4 last4;含連字號/底線變體(sk-proj-…, sk-ant-…)
+    data = re.sub(r"(sk-[A-Za-z0-9_-]{4})[A-Za-z0-9_-]+([A-Za-z0-9_-]{4})", r"\1****\2", data)
     # JWT: keep only the header prefix + last4 of signature; mask payload & sig body
     data = re.sub(r"(eyJ[A-Za-z0-9_-]{4})[A-Za-z0-9_-]*\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{4})[A-Za-z0-9_-]*", r"\1.****.\3", data)
-    # Bearer tokens / Authorization headers
-    data = re.sub(r"(Bearer\s+)[A-Za-z0-9._-]{8,}", r"\1****", data, flags=re.IGNORECASE)
-    # Cookie header values (name=value pairs)
-    data = re.sub(r"(Cookie:\s*[^=;\s]+)=[^;\s]+", r"\1=****", data)
+    # Bearer tokens / Authorization headers:完整 Base64 字元集,防 + 或 = 後段裸露
+    data = re.sub(r"(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}", r"\1****", data, flags=re.IGNORECASE)
+    # Cookie / Set-Cookie 標頭:大小寫不敏感(HTTP/2 為小寫),逐對遮蔽所有 name=value,
+    # 只保留 Path/Domain/SameSite/Max-Age/Expires 等非機密屬性
+    data = re.sub(r"((?:Set-)?Cookie:\s*)([^\r\n]+)", _mask_cookie_pairs, data,
+                  flags=re.IGNORECASE)
     # AWS-style access keys
     data = re.sub(r"(AKIA[0-9A-Z]{4})[0-9A-Z]+", r"\1****", data)
     return data
@@ -168,12 +194,46 @@ class ReportGenerator:
         self.records: list[Any] = []
         self.exfiltrated: list[str] = []
         self.achieved: list[str] = []
+        # exfil 去重錨點:記「原始值」(非遮罩後)。兩條前四後四相同的真金鑰
+        # 遮罩後同形,若按遮罩後去重會誤丟第二條真實擷取物;redact 對已遮罩
+        # 文本天然冪等,故原始值去重不破壞重複 attach 的冪等性。
+        self._exfil_seen: set[str] = set()
 
-    def add_finding(self, f: Finding) -> None:
+    def add_finding(self, f: Any) -> None:
+        # 註:findings.Finding 與本模組 Finding 是兩個 dataclass(欄位子集相容),
+        # cli 橋接層一直傳 findings.Finding 進來。duck-typing 如實反映現狀,
+        # render() 只讀它實際用到的欄位。
         self.findings.append(f)
 
-    def add_exfil(self, data: str, redact_mode: str = "auto") -> None:
-        self.exfiltrated.append(redact(data, redact_mode))
+    def add_exfil(self, data: str, redact_mode: str | None = None) -> None:
+        # 統一入口(agy review):strip + 去重(以原始值為錨)+ 預設沿用實例
+        # redact_mode,避免手動登錄與 attach 的脫敏策略分裂。
+        s = str(data).strip()
+        if not s or s in self._exfil_seen:
+            return
+        self._exfil_seen.add(s)
+        self.exfiltrated.append(redact(s, self.redact_mode if redact_mode is None else redact_mode))
+
+    def attach_exfil(self, findings: list[Any] | None = None) -> int:
+        """把 finding.extracted 逐筆登錄進 §3(exfiltrated),走既有 redact 脫敏。
+
+        去重後回填,回傳新增筆數。這是「擷取資料 → 正式報告 §3」的閉環入口:
+        掃描器路徑由 convert 後調用,agent 路徑由 add_finding 的 exfiltrated_data
+        走同一通道(見 agent.py),確保真實擷取物不再只留在 free-text evidence。
+        """
+        items = []
+        for f in findings if findings is not None else self.findings:
+            for raw in (getattr(f, "extracted", None) or []):
+                # 多行片段拆成單一條目,§3 的 code-span 條列才不會被斷行撕開
+                items.extend(ln for ln in str(raw).splitlines() if ln.strip())
+        added = 0
+        for d in items:
+            d = d.strip()
+            if not d or d in self._exfil_seen:
+                continue
+            self.add_exfil(d, self.redact_mode)
+            added += 1
+        return added
 
     def _severity_count(self) -> str:
         counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
@@ -243,11 +303,26 @@ class ReportGenerator:
             lines.append("")
         lines += [
             "## 3. 偷到的資料 / 達成的結果",
-            "**Extracted data (redacted):**",
         ]
+        if self.redact_mode == "full":
+            # --full:此章節是未脫敏原樣資料,標題如實宣告(防誤當已脫敏擴散)
+            lines.append("**Extracted data (UNREDACTED — --full enabled):**")
+            lines.append("> [!CAUTION] 本節包含未脫敏機密資料,請妥善保管,勿直接轉發。")
+        else:
+            lines.append("**Extracted data (redacted):**")
         for e in self.exfiltrated:
-            lines.append(f"- `{e}`")
-        lines += ["**Achieved:**"] + [f"- {a}" for a in self.achieved] + [
+            # 反引號會提前閉合 code-span(agy review):含 ` 的片段改用雙反引號包裹
+            tick = "``" if "`" in e else "`"
+            pad = " " if tick == "``" else ""
+            lines.append(f"- {tick}{pad}{e}{pad}{tick}")
+        if not self.exfiltrated:
+            lines.append("- (本次評估未登錄實際擷取資料)")
+        lines.append("**Achieved:**")
+        for a in self.achieved:
+            lines.append(f"- {a}")
+        if not self.achieved:
+            lines.append("- (無)")
+        lines += [
             "",
             "## 4. 漏洞詳情",
             "| ID | OWASP | 類別 | 嚴重 | CVSS | 可復現 |",

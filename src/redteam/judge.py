@@ -132,7 +132,11 @@ class LLMJudge:
                     "CONFIRMED: decisive evidence in the payload/response.\n"
                     "REFUTED: the evidence clearly does not indicate a real "
                     "vulnerability.\n"
-                    "UNCERTAIN: cannot decide from evidence alone."
+                    "UNCERTAIN: cannot decide from evidence alone.\n"
+                    "If the evidence lists 'Extracted data claimed', those claims "
+                    "count as decisive ONLY when each snippet appears verbatim in "
+                    "the observed evidence; claimed data not literally present "
+                    "means hallucination -> REFUTED or UNCERTAIN, never CONFIRMED."
                 ),
             },
             {
