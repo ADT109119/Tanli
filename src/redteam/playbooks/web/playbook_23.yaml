@@ -22,7 +22,7 @@ summary: >
 steps:
   - recon: "Source/Sink 盤點(被動):從 JS bundle 找危險 sink——innerHTML/outerHTML/document.write/eval/setTimeout 字串參數/location 操縱;URL 參數、hash、postMessage 監聽器為 Source 清單。DOM 型 XSS 是『讀碼就能發現』的漏洞,零互動成本。"
   - probe: "反射點探測(benign marker 鐵律):送唯一字母數字 token 觀察回顯位置與上下文(HTML body?屬性內?script 內字面量?JS 變數?)。回顯上下文決定轉義缺口:在 <script>var x='TOKEN' 內 => 跳脫引號即執行環境;在屬性內 => 檢查引號/事件屬性是否過濾。僅用字母 token 與無害探測,不投遞 script 標籤。"
-  - probe: "CSP 評估(被動,站方防護盤點):取 CSP 標頭分析——有無 unsafe-inline/unsafe-eval、nonce/hash 策略、report-uri 是否存在、frame-ancestors 覆蓋。CSP 缺失或含 unsafe-inline 時,任何注入點的利用成本驟降(與 實地觀測 medium finding 同源)。"
+  - probe: "CSP 評估(被動,站方防護盤點):取 CSP 標頭分析——有無 unsafe-inline/unsafe-eval、nonce/hash 策略、report-uri 是否存在、frame-ancestors 覆蓋。CSP 缺失或含 unsafe-inline 時,任何注入點的利用成本驟降(與實地觀測 medium finding 同源)。"
   - verify: "儲存型/DOM 型的確認僅在自有帳號/自有靶場:自有帳號寫入 benign marker,另一自有帳號觀看觀察回顯(不打 cookie、不呼叫真實 API、不碰他人帳號)。SPA 前端路由的 hash/source 處理用本地靶場復刻驗證,不在生產執行。"
   - note: "報告敘事要點:XSS 的 CVSS 取決於(1)觸發者權限層(管理員面板 XSS >> 訪客頁)(2)載荷生命週期(儲存型蠕蟲 > 反射型一次性)(3)敏感 API 可達性(同 Origin 可呼的 API 面)。同樣一個回顯,敘述這三點分數差兩級。"
   - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(XSS 三形態表+防禦深度段),OWASP Top10:2025;PortSwigger XSS 章節、DOM-based XSS 專題(DOMPURIFY 繞過見 web-013)。修復:上下文轉義庫(輸出編碼由輸出點決定,非輸入過濾)、CSP nonce 模式、Cookie HttpOnly+SameSite、前端 Trusted Types(阻斷 sink 面)。"

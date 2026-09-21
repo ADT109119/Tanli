@@ -37,7 +37,7 @@ def test_render_and_source_provenance():
 
 
 def test_bola_family_playbooks():
-    """操作者實務案例(web-019 開放式發信中繼)與泛 BOLA 家族(web-020)入庫可查。"""
+    """操作者案例(web-019 開放式發信中繼)與泛 BOLA 家族(web-020)入庫可查。"""
     lib = load_library()
     for q, tids in [("BOLA", {"web-019", "web-020"}), ("IDOR", {"web-019", "web-020"}),
                     ("Open Relay", {"web-019"}), ("OTP", {"web-019"})]:

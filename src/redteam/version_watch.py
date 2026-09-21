@@ -1,7 +1,7 @@
 """軟體版本 CVE 比對器(version watch)— 實務需求產品化。
 
-來源:2026-09-18 框架指紋實測 — 指紋拿到 n8n@2.39.4 後,發現 n8n 官方
-兩天前(9/16)剛發 17 條安全公告(stable 修復版 2.39.6),全靠手動查論壇。
+動機:指紋拿到框架版本(如 n8n@2.39.4)後,官方可能兩天前才剛發安全公告
+(修復版 2.39.6),全靠手動查論壇太慢。
 本模組把「指紋 → 版本 → GHSA 查詢 → 適用 CVE + 修復版本」自動化。
 
 資料源:GitHub Advisory Database (GHSA) REST API — 公開、免驗證可用
@@ -149,7 +149,7 @@ def watch(product: str, ecosystem: str, current_version: str,
     except Exception as e:  # noqa: BLE001
         res.error = f"GHSA 查詢失敗({e.__class__.__name__}): {e}"
         return res
-    # 資料源新鮮度:GHSA 對廠商公告有數天同步滯後(實測:n8n 9/16 公告
+    # 資料源新鮮度:GHSA 對廠商公告有數天同步滯後(實測案例:9/16 公告
     # 於 9/18 仍未入庫)。matches=0 時報告必須標出最新公告日,
     # 避免「查無 CVE」被誤讀成「真的沒漏洞」。
     dates = [str(a.get("published_at") or "")[:10] for a in advisories if a.get("published_at")]
@@ -176,14 +176,14 @@ def watch(product: str, ecosystem: str, current_version: str,
 
 
 # ---------------------------------------------------------------------------
-# 指紋自動偵測:從 HTML/JS 中找 <pkg>@<ver> 宣告(n8n sentry release meta
-# 實務模式 — "release":"n8n@2.39.4")。回傳候選清單 [(product, version)]。
+# 指紋自動偵測:從 HTML/JS 中找 <pkg>@<ver> 宣告(常見於 sentry release meta
+# — "release":"pkg@2.39.4")。回傳候選清單 [(product, version)]。
 # ---------------------------------------------------------------------------
 
 #: sentry 常見 release 宣告:"release":"n8n@2.39.4" / release=n8n@2.39.4
 _RELEASE_DECL = re.compile(r"""release["']?\s*[:=]\s*["']?([\w.\-]+)@(\d[\w.\-]*)""")
 
-#: HTML 屬性中的 base64 值(sentry meta 實測:release 藏在 base64 後)
+#: HTML 屬性中的 base64 值(實測案例:release 藏在 base64 meta 後)
 _B64_ATTR = re.compile(r"""["']([A-Za-z0-9+/]{24,}={0,2})["']""")
 
 

@@ -287,7 +287,7 @@ def run(
                         )
 
                     # --cve-watch:從目標 HTML 找 <pkg>@<ver> 指紋宣告,
-                    # 查 GHSA 列適用未修 CVE(2026-09-18 n8n 實務需求產品化)。
+                    # 查 GHSA 列適用未修 CVE(實務需求產品化)。
                     # GHSA 查詢走 api.github.com(非靶點),對目標零額外流量。
                     if cve_watch:
                         from .version_watch import detect_releases, watch
