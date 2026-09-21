@@ -3,10 +3,16 @@
 auto-fit + 兩端對齊：文字總寬恰好等於主標題寬（不超出主標題左右界線）。
 用法: python3 stamp_fit.py <in.png> <out.png> <subtitle> <x0> <x1> [size]
 """
+import os
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = "~/.fonts/NotoSansCJKtc-Regular.otf"
+# 字型解析：環境變數 STAMP_FONT > ~/.fonts/ 慣例位置（不硬編碼個人帳號路徑）
+_FONT_CANDIDATES = [
+    os.environ.get("STAMP_FONT", ""),
+    os.path.expanduser("~/.fonts/NotoSansCJKtc-Regular.otf"),
+]
+FONT = next((p for p in _FONT_CANDIDATES if p and os.path.exists(p)), _FONT_CANDIDATES[1])
 MIN_SIZE = 16
 
 
