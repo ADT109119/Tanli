@@ -1,0 +1,22 @@
+id: web-036
+name: "同 Controller 授權閘門差分掃描:找出『漏網的未保護端點』(A01)"
+owasp: A01
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  實戰驗證的高命中率手法:同一後端 controller 下的端點群,授權檢查常是逐支撰寫而非
+  統一 filter/middleware,於是出現「getUserInfo 有 session 閘門(回NOT_AUTHENTICATED),
+  queryEvents 完全沒檢查」式的漏網端點。做法是先把同 controller 端點全部
+  列出,對每一支發「最小合法外形請求」,以回應差異判定制服端是否有閘門:有閘門回
+  固定拒絶碼(如 id=701/NOT_AUTHENTICATED/401/403),無閘門則執行業務邏輯(回 []、200、
+  或部分欄位)。只要有任何一支無閘門端點能觸發資料查詢,即為 A01 破口。
+
+steps:
+  - recon: "端點列舉(被動優先):抓主頁面 + 全部 JS bundle(常见 xxx.js/frontjs.js 類檔案),grep AJAX 呼叫的 URL 清單;補以常見 controller 變體探測。產出端點清單:路徑、方法、參數外形(從 JS call site 抄)。"
+  - probe: "差分閘門測試:對清單中每一支端點,用同一 session(未登入)發一次最小外形請求(參數全填明顯假值如 TEST/19000101,不碰真實個資)。分類回應:A=固定拒絶碼(有閘門)/ B=200+業務結構(無閘門,重點)/ C=500(異常洩漏,另立 finding)/ D=WAF 阻擋(記錄 WAF 覆蓋不一致)。"
+  - probe: "'回 [] 不算有保護':無閘門端點回空陣列只證明查詢執行但條件無資料,不證明授權檢查存在。判定制服端有無閘門只能看是否出現固定拒絶回應,不能看有無資料。"
+  - verify: "對 B 類端點做 proof-of-access:設法人員自有測試帳號或已確認的種子資料做一次受控請求,取得一筆即停(單次、遮罩、不批量),add_finding 附逐字請求+回應。同報告中並列 A 類端點回應作為『閘門存在但覆蓋不一致』的差分證據——這比單獨證明一支無檢查更有說服力。"
+  - reference: "本劇源自多輪實戰:某醫療預約系統 /controller 下唯一有 session 檢查的端點僅一支,其餘查詢端點全裸奔(已通报)。對應 OWASP A01 Broken Access Control(2021 #1)、CWE-862 Missing Authorization。修復方向:統一中介層強制認證+授權(deny-by-default),端點級白名單標記公開端點,而非逐支記得加檢查。"
