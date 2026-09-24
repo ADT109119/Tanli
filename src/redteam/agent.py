@@ -712,6 +712,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
     """
     result = AgentRunResult()
     nagged = False  # finish 守門只擋一次
+    narration_streak = 0  # 連續「純文字無 tool call」次數(run6 教訓,工具呼叫即重置)
     last_prompt_tokens = 0  # API 回傳的真實上下文用量(每步更新)
     if tools.ws is not None:
         result.workspace = str(tools.ws.root)
@@ -772,11 +773,32 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
             console.print(f"  [magenta]◈ step {step_i+1}[/] {thought[:180]}")
 
         if "final" in out:
+            # run6 教訓:thinking/tool 混合模式下模型會輸出「純文字旁白而無 tool
+            # call」(實測 ~1/6 機率),這不代表評估結束——直接當 final 會把中途
+            # 分析語誤判為收工(如 run6:step14 旁白即終止,0 findings)。
+            # 策略:第一次純文字 → 提示模型表態(續跑工具 or call finish);
+            # 連續第二次純文字 → 視為真正最終總結。
+            text = out["final"]
+            if text.strip() and text.strip() != "(no summary)":
+                narration_streak += 1
+                if narration_streak < 2:
+                    result.transcript.append(
+                        {"step": step_i + 1, "thought": text[:500],
+                         "tool": "narration(no-tool-call)", "args": {},
+                         "ok": True, "note": "純文字回覆,已提示表態",
+                         "data_preview": text[:800]})
+                    messages.append({"role": "assistant", "content": text})
+                    messages.append({"role": "user", "content":
+                        "[你剛回覆純文字但沒呼叫工具。評估未完→請呼叫工具繼續;"
+                        "要收工→請 call finish 附 summary+achieved(才算正式結束)。"
+                        "再次只回純文字將被視為最終總結。]"})
+                    continue
             result.finished = True
             result.summary = out["final"]
             break
 
         tool, args = out.get("tool", ""), out.get("args", {})
+        narration_streak = 0  # 正常工具呼叫 → 重置旁白計數
         if tool == "add_finding":
             cve_arg = str(args.get("cve", ""))
             # triage(借鑑 CypherFix):固定公式風險分,確定性可稽核

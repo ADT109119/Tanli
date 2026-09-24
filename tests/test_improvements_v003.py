@@ -89,6 +89,38 @@ def test_finish_achieved_collected(tools):
     assert res.findings[0].owasp == "A01"
 
 
+def test_narration_no_tool_call_not_treated_as_final(tools):
+    """run6 教訓回歸:thinking 模式模型會吐「純文字無 tool call」旁白。
+    第一次必須提示表態並續跑;第二次連續純文字才算真最終總結。"""
+    brain = FakeBrain([
+        {"tool": "fingerprint", "args": {}},
+        {"final": "分析:queryEvents 沒有 session 檢查,下一步要驗證..."},  # 旁白
+        {"tool": "http_request", "args": {"method": "GET", "path": "/x"}},          # 被提示後續跑
+        {"final": "評估完成,全部線索閉合。"},                                        # 連續第二次?不,中間有工具→重置
+        {"final": "最終總結。"},
+    ])
+    res = run_agent(tools, brain, goal="t", max_steps=10)
+    # 第一次旁白不終止(被提示);工具呼叫重置計數;第二次旁白(重置後)+第三次旁白...
+    # 實際流:step1 tool, step2 narration(提示), step3 tool(重置), step4 narration(提示),
+    # step5 narration 連續第二次 → 終止
+    narr = [t for t in res.transcript if t["tool"] == "narration(no-tool-call)"]
+    assert len(narr) == 2  # step2 與 step4 各記一筆
+    assert res.finished and res.summary == "最終總結。"
+    assert res.steps == 5
+
+
+def test_single_narration_continues_loop(tools):
+    """單次旁白後模型改用工具:迴圈正常續跑不被誤終止。"""
+    brain = FakeBrain([
+        {"final": "先看一下子來源..."},   # 純文字 → 提示
+        {"tool": "fingerprint", "args": {}},
+        {"tool": "finish", "args": {"summary": "ok", "achieved": ["x"]}},
+    ])
+    res = run_agent(tools, brain, goal="t", max_steps=5)
+    assert res.finished and res.summary == "ok"
+    assert any(t["tool"] == "narration(no-tool-call)" for t in res.transcript)
+
+
 def test_finish_refused_once_then_allowed(tools):
     """守門盲區回歸(run5 教訓):第一次 finish 被拒後,第二次 finish 必放行,
     且拒絶訊息要明示『再次 call finish 不再攔截』。"""
