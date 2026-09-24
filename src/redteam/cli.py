@@ -723,7 +723,13 @@ def agent(
     goal: str = typer.Option("", "--goal", "-g", help="評估目標(預設:雙軌全面評估)"),
     steps: int = typer.Option(30, "--steps", help="自主循環最大步數"),
     probes: int = typer.Option(60, "--probes", help="HTTP 探測硬預算"),
-    token_budget: int = typer.Option(200_000, "--token-budget", help="LLM token 預算"),
+    token_budget: int = typer.Option(200_000, "--token-budget",
+                                     help="LLM token 預算(0=不限,只受 --steps/--probes 約束)"),
+    context_window: int = typer.Option(0, "--context-window",
+                                       help="模型 context window(token 數,0=不啟用防爆防護;"
+                                            "逼近時自動深度壓縮/優美停止)"),
+    context_compress_at: int = typer.Option(24_000, "--context-compress-at",
+                                            help="估算上下文超過此字元量即壓縮舊工具輸出"),
     auth_cred: Optional[str] = typer.Option(None, "--auth-cred", help="Signed JWS credential file"),
     public_key: Optional[str] = typer.Option(None, "--public-key", help="Issuer Ed25519 public key (PEM)"),
     config_path: Optional[str] = typer.Option(None, "--config", "-c", help="config.yaml path"),
@@ -804,14 +810,21 @@ def agent(
         raise typer.Exit(1)
 
     console.print(f"[bold cyan]自主 Agent 啟動[/] target={target} steps≤{steps} "
-                  f"probes≤{probes} tokens≤{token_budget}")
+                  f"probes≤{probes} "
+                  + (f"tokens≤{token_budget}" if token_budget else "tokens=不限")
+                  + (f" window={context_window}" if context_window else ""))
+    started_ts = time.strftime("%Y-%m-%d %H:%M")
     result = run_agent(tools, brain,
                        goal=goal or ("雙軌安全評估:識別真實元件/框架 → 產品級 CVE 核實 → "
                                      "動態嘗試確認;記錄所有有證據的發現"),
                        max_steps=steps, token_budget=token_budget, console=console,
-                       engagement_brief=engagement_brief)
+                       engagement_brief=engagement_brief,
+                       context_window=context_window,
+                       context_compress_at=context_compress_at)
     console.print(f"[bold]Agent 完成[/] steps={result.steps} probes={result.probes} "
-                  f"tokens={result.tokens} finished={result.finished}")
+                  f"tokens={result.tokens} finished={result.finished}"
+                  + (f" 壓縮×{result.compressions}(省 {result.context_saved_chars} 字元)"
+                     if result.compressions else ""))
     if result.summary:
         console.print(f"[italic]{result.summary[:600]}[/]")
 
@@ -833,16 +846,36 @@ def agent(
             description=f.description,
             steps=["autonomous agent loop"], poc=f.evidence[:1500] or None,
             confidence=f.confidence,
-            evidence=f.evidence[:2000], source="agent", owasp="A06" if f.cve else "",
+            evidence=f.evidence[:2000], source="agent",
+            owasp=("A06" if f.cve else "") or getattr(f, "owasp", ""),
             # agent 經 add_finding.exfiltrated_data 登錄的擷取物過橋 → §3
             extracted=list(getattr(f, "exfiltrated", None) or []),
         )
         annotate_cvss([fd])
         report.add_finding(fd)
+    # finish.achieved → §3 達成的結果(僅採模型如實登錄項,不代編)
+    for a in getattr(result, "achieved", []):
+        report.achieved.append(a)
     # exfil 閉環:把各 finding 的 extracted 逐筆登錄進 §3(自動走 redact 脫敏;
     # 未傳 --full 時金鑰/JWT/Bearer 一律遮蔽)
     n_exfil = report.attach_exfil()
-    out = report.write()
+    # 稽核資訊真實化(修復:舊版audit欄恆為 '-',授權憑證存在時應落地)
+    audit = {"started": started_ts, "ended": time.strftime("%Y-%m-%d %H:%M")}
+    import hashlib as _hl
+    try:
+        if guard.is_authorized() and guard.statement is not None:
+            audit["tester"] = guard.statement.authorized_by or "-"
+            t0 = guard.statement.targets[0] if guard.statement.targets else None
+            if t0 is not None:
+                audit["scope"] = (t0.host
+                                  + (":" + ",".join(map(str, t0.ports)) if t0.ports else "")
+                                  + (t0.paths[0] if t0.paths else "")
+                                  + (f" [{t0.window}]" if t0.window else ""))
+        if guard.credential_kid:
+            audit["auth_hash"] = _hl.sha256(guard.credential_kid.encode()).hexdigest()[:12]
+    except Exception:  # noqa: BLE001 — 稽核欄裝飾性資訊,取不到不阻斷報告
+        pass
+    out = report.write(audit=audit)
     console.print(f"[bold green]Report: {out}[/]")
     if n_exfil:
         console.print(f"[yellow]§3 偷到的資料:登錄 {n_exfil} 筆"

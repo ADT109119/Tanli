@@ -113,6 +113,32 @@ REMEDIATION_BY_CATEGORY: dict[str, str] = {
         "改用參數化查詢/預編譯陳述式與輸出編碼;對所有外部輸入做白名單驗證;"
         "以最小權限帳號執行資料庫與系統指令。"
     ),
+    # agent 自由文本類別別名(實測:agent 常寫 "Broken Access Control /
+    # Unauthenticated Data Access"、"broken_access_control" 等,舊表全數
+    # miss 退回通用話術)→ 指向與 OWASP A01/A05 相同的具體建議
+    # ⚠ 順序:必須列在 "config" 之前——混合類別字串(如 "access control
+    #   misconfiguration")可能同時含兩子字串,dict 迭代順序決定命中;
+    #   未授權存取優先於組態建議(v0.0.3 實測教訓)
+    "access control": (
+        "以伺服器端為主的存取控制(deny-by-default)覆蓋所有端點;資源存取前驗證"
+        "擁有關係,並對 IDOR 類參數改用不可列舉的間接參考。"
+    ),
+    "access_control": (
+        "以伺服器端為主的存取控制(deny-by-default)覆蓋所有端點;資源存取前驗證"
+        "擁有關係,並對 IDOR 類參數改用不可列舉的間接參考。"
+    ),
+    "idor": (
+        "以伺服器端為主的存取控制(deny-by-default)覆蓋所有端點;資源存取前驗證"
+        "擁有關係,並對 IDOR 類參數改用不可列舉的間接參考。"
+    ),
+    "unauth": (
+        "在伺服器端(而非前端 JS)為每個資料端點補上統一的 session/授權檢查,"
+        "未授權一律回傳 401/導向登入;不得以可猜參數(卡號+生日)代替憑證。"
+    ),
+    "config": (
+        "建立可重覆的加固基線(鏡像/組態即程式碼),移除預設憑證與示範頁面,"
+        "以自動化組態掃描納入 CI/CD 把關。"
+    ),
     "llm01": (
         "對 LLM 輸入做注入防護:系統提示與外部內容以明確定界分隔,套用輸入過濾"
         "與輸出標記偵測;關鍵操作不得僅依賴模型輸出授權,需外部權限系統把關。"
@@ -245,10 +271,17 @@ class ReportGenerator:
         return ", ".join(f"{k}={v}" for k, v in counts.items())
 
     def _owasp_counts(self) -> dict[str, int]:
-        """Count findings per OWASP class (A01-A10 + LLMxx), web & llm grouped."""
+        """Count findings per OWASP class (A01-A10 + LLMxx), web & llm grouped.
+
+        agent 常把 OWASP 寫成自由文字(如 "OWASP A01:2021 — Broken Access
+        Control"),此處正規化抽取 A0x/LLMxx code;抽不到才計「未映射」。
+        """
         counts: dict[str, int] = {}
         for f in self.findings:
-            key = f.owasp or "未映射"
+            # owasp 欄優先;agent 也常把 OWASP code 塞進自由文本 category,一併掃
+            raw = (f.owasp or "") + " " + (f.category or "")
+            m = re.search(r"\b(A0[1-9]|A10|LLM\d{2})\b", raw.upper())
+            key = m.group(1) if m else ((f.owasp or "").strip() or "未映射")
             # map full owasp strings (e.g. "LLM01") -> short class
             counts[key] = counts.get(key, 0) + 1
         return counts
@@ -263,11 +296,21 @@ class ReportGenerator:
             return (getattr(x, "severity", "") or "").lower()
 
         review_needed = [f for f in self.findings if _sev(f) in ("high", "critical")]
+        if not self.findings:
+            status_line = "無發現"
+        elif review_needed:
+            status_line = (f"草稿 — 含 {len(review_needed)} 項高危/嚴重自動評分發現,"
+                           "定稿前需人工複核")
+        else:
+            # 修復:舊版只認 high/critical,medium/low 存在時誤寫「無高危發現」
+            # 讓人誤讀成整份報告沒東西。改為如實統計。
+            status_line = (f"完成 — {len(self.findings)} 項發現"
+                           f"({self._severity_count()}),無須人工複核之高危項")
         lines = [
             f"# 紅隊測試報告 — {self.target}",
             "",
             # 草稿狀態行:CI/自動化管線據此辨識「未定稿」(agy review)
-            f"> **狀態**: {'草稿 — 含 ' + str(len(review_needed)) + ' 項高危/嚴重自動評分發現,定稿前需人工複核' if review_needed else '無高危發現'}",
+            f"> **狀態**: {status_line}",
             f"> **稽核資訊**: 授權 token hash `{audit.get('auth_hash', '-')}` | Scope: `{audit.get('scope', '-')}` | 測試者: `{audit.get('tester', '-')}`",
             f"> **時間線**: {audit.get('started', '-')} → {audit.get('ended', '-')}",
             "",
@@ -360,8 +403,8 @@ class ReportGenerator:
         ]
         return "\n".join(lines)
 
-    def write(self, out_dir: str = ".") -> Path:
+    def write(self, out_dir: str = ".", audit: dict | None = None) -> Path:
         ts = time.strftime("%Y%m%d_%H%M%S")
         path = Path(out_dir) / f"report_{self.target.replace('://', '_').replace('/', '_')}_{ts}.md"
-        path.write_text(self.render())
+        path.write_text(self.render(audit=audit))
         return path

@@ -96,8 +96,9 @@ def test_report_file_written_contains_cvss_and_remediation(tmp_path):
     content = out_file.read_text(encoding="utf-8")
     assert "CVSS:3.1/" in content
     assert "Strict-Transport-Security" in content
-    # 草稿狀態行:無高危 → 明示無高危發現
-    assert "狀態" in content and "無高危發現" in content
+    # 狀態行(v0.0.3 修復):僅有 medium/low 時如實統計,不再誤寫「無高危發現」
+    assert "狀態" in content and "完成 — 1 項發現" in content
+    assert "無高危發現" not in content
 
 
 def test_report_draft_status_for_high_risk():

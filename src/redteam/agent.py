@@ -15,6 +15,7 @@ Brain 可注入(FakeBrain 測試);生產用 OpenAI-compatible endpoint
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -243,6 +244,11 @@ class AgentTools:
                         "direct", "low_priv", "auth_required",
                         "user_interaction", "internal_only"],
                         "description": "how reachable the flaw is for an attacker"},
+                    "owasp": {"type": "string", "description": (
+                        "OWASP Top 10 2021 class when applicable: A01..A10 "
+                        "(e.g. A01 for missing auth/IDOR, A05 for config issues) "
+                        "or LLM01..LLM10 for LLM targets. Drives the report's "
+                        "OWASP aggregation and remediation advice.")},
                     "exfiltrated_data": {
                         "type": "array", "items": {"type": "string"},
                         "description": ("Verbatim snippets of sensitive data you LITERALLY "
@@ -262,7 +268,19 @@ class AgentTools:
             "description": "End the assessment with a short summary of what was done and found.",
             "parameters": {
                 "type": "object",
-                "properties": {"summary": {"type": "string"}},
+                "properties": {
+                    "summary": {"type": "string"},
+                    "achieved": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": (
+                            "Goal outcomes actually ACHIEVED during this run — one "
+                            "short factual line each, grounded in tool output (e.g. "
+                            "'證明未登入可取得 X 端點資料', '取得產品版本指紋'). "
+                            "These populate the report's '達成的結果' section. Omit "
+                            "if the goal was not achieved; never claim outcomes you "
+                            "did not observe."),
+                    },
+                },
                 "required": ["summary"],
             },
         },
@@ -504,7 +522,12 @@ Method rules (mandatory):
    output — never guess or paraphrase; omit the field when nothing was extracted.
 7. Stay inside the authorized scope; prefer read-only observation. You have a hard
    probe budget and a token budget.
-8. When you have exhausted reasonable checks (or budget), call finish with a summary.
+8. When recording a finding, set the owasp field (A01-A10 / LLMxx) when the flaw maps
+   to a class (missing authz/IDOR -> A01, injection -> A03, missing headers/config ->
+   A05, missing auth -> A07...). It drives report aggregation and remediation advice.
+9. When you have exhausted reasonable checks (or budget), call finish with a summary
+   AND an 'achieved' list: the concrete goal outcomes you actually delivered
+   (factual, grounded in tool output — e.g. 'proof-of-access achieved on endpoint X').
 """ + GUARD_RULE + """
 Keep working notes via write_note for anything worth carrying to a next session.
 Working-memory rule: once you have a plan, keep it alive with the scratchpad tool
@@ -515,7 +538,15 @@ Think step by step; one tool call per message."""
 
 
 class OpenAIBrain:
-    """OpenAI-compatible tool-calling brain(與 LLMJudge 同配置源)。"""
+    """OpenAI-compatible tool-calling brain(與 LLMJudge 同配置源)。
+
+    env 可調(皆選配,默認=既有行為):
+      REDTEAM_AGENT_MAX_TOKENS   - 單步 completion 上限(默認 1200;開 thinking 建議 4000+)
+      REDTEAM_AGENT_EXTRA_BODY   - JSON 物件,原樣併入 chat.completions 請求 body
+                                   (給 gateway 的 thinking/reasoning 開關,如
+                                   '{"thinking":{"type":"enabled"}}')
+      REDTEAM_AGENT_TEMPERATURE  - 覆蓋 agent_temperature
+    """
 
     def __init__(self, cfg: dict[str, Any]):
         from .config import Config
@@ -533,29 +564,55 @@ class OpenAIBrain:
             kwargs["base_url"] = base_url
         self.client = OpenAI(**kwargs)
         self.temperature = cfg.get("agent_temperature", 0.2)
+        if t := os.environ.get("REDTEAM_AGENT_TEMPERATURE"):
+            try:
+                self.temperature = float(t)
+            except ValueError:
+                pass
+        self.max_tokens = 1200
+        if t := os.environ.get("REDTEAM_AGENT_MAX_TOKENS"):
+            try:
+                self.max_tokens = max(256, int(t))
+            except ValueError:
+                pass
+        # extra_body:給不認 OpenAI 標準參數的 gateway(如 thinking 開關)
+        self.extra_body: dict[str, Any] = {}
+        if raw := os.environ.get("REDTEAM_AGENT_EXTRA_BODY"):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    self.extra_body = parsed
+            except json.JSONDecodeError:
+                pass
 
     def step(self, messages: list[dict]) -> dict:
+        kwargs: dict[str, Any] = {}
+        if self.extra_body:
+            kwargs["extra_body"] = self.extra_body
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=messages,  # type: ignore[arg-type]
             tools=[{"type": "function", "function": s} for s in AgentTools.SCHEMAS],  # type: ignore[arg-type]
             tool_choice="auto",
             temperature=self.temperature,
-            max_tokens=1200,
+            max_tokens=self.max_tokens,
+            **kwargs,
         )
         msg = resp.choices[0].message
         usage = getattr(resp, "usage", None)
         tokens = (usage.total_tokens if usage else 0)
+        prompt_tokens = (getattr(usage, "prompt_tokens", 0) if usage else 0)
         if getattr(msg, "tool_calls", None):
             tc = msg.tool_calls[0]  # type: ignore[index]
             try:
-                args = json.loads(tc.function.arguments or "{}")  # type: ignore[union-attr]
+                args = json.loads(tc.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
-            return {"thought": msg.content or "", "tool": tc.function.name,  # type: ignore[union-attr]
-                    "args": args, "tokens": tokens, "_msg": msg}
+            return {"thought": msg.content or "", "tool": tc.function.name,  # type: ignore[arg-type]
+                    "args": args, "tokens": tokens, "prompt_tokens": prompt_tokens,
+                    "_msg": msg}
         return {"thought": msg.content or "", "final": msg.content or "(no summary)",
-                "tokens": tokens, "_msg": msg}
+                "tokens": tokens, "prompt_tokens": prompt_tokens, "_msg": msg}
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +631,9 @@ class AgentFinding:
     triage_score: float = -1.0
     triage_factors: dict = field(default_factory=dict)
     kev: bool = False
+    #: OWASP 2021 類別(A01-A10/LLMxx),由 agent 經 add_finding.owasp 登錄;
+    #: 空字串 = 模型未給 → 報告端由 category 文字推導
+    owasp: str = ""
     #: LLM 經 add_finding.exfiltrated_data 登錄的實際擷取片段(逐字觀測物),
     #: 報告生成時經 Finding.extracted → attach_exfil 進 §3(自動脫敏)
     exfiltrated: list[str] = field(default_factory=list)
@@ -587,21 +647,70 @@ class AgentRunResult:
     probes: int = 0
     finished: bool = False
     summary: str = ""
+    #: finish.achieved:模型如實登錄的目標達成項 → 報告 §3 'Achieved'
+    achieved: list[str] = field(default_factory=list)
     transcript: list[dict] = field(default_factory=list)
     workspace: str = ""
     engagement_package: str = ""
+    #: 上下文壓縮統計(觀測用):compressions=觸發次數, context_saved_chars=省下的字元數
+    compressions: int = 0
+    context_saved_chars: int = 0
+
+
+def _msg_chars(m: dict) -> int:
+    return len(str(m.get("content") or ""))
+
+
+def compress_messages(messages: list[dict], *, keep_recent: int = 8,
+                      max_tool_chars: int = 1200) -> tuple[list[dict], int]:
+    """上下文壓縮:Hermes 式 compaction 的極簡版。
+
+    策略(確定性、零 LLM 成本):
+    - 永留:system prompt + opening(前兩則)與最近 keep_recent 則(工作記憶)
+    - 較舊的 [tool ...] 觀察結果若超 max_tool_chars → 截成頭部摘要+卸載指針
+      (完整內容仍在 transcript/workspace tool-outputs,可經 read_tool_output 取回)
+    - 較舊的 assistant 思考與短訊息不動
+    回傳 (新清單, 節省字元數)。冪等:已壓縮訊息再度壓縮是 no-op。
+    """
+    if len(messages) <= 2 + keep_recent:
+        return messages, 0
+    saved = 0
+    out: list[dict] = []
+    cut = len(messages) - keep_recent
+    for i, m in enumerate(messages):
+        c = str(m.get("content") or "")
+        if (i >= 2 and i < cut and m.get("role") == "user"
+                and c.startswith("[tool ") and len(c) > max_tool_chars
+                and "[compressed" not in c):
+            head = c[:max_tool_chars]
+            new_c = (head + f"\n[compressed: 原 {len(c)} 字元,中段省略。"
+                     "完整內容在 transcript / workspace tool-outputs,"
+                     "可用 read_tool_output 檢索]")
+            saved += len(c) - len(new_c)
+            m = {**m, "content": new_c}
+        out.append(m)
+    return out, saved
 
 
 def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
               token_budget: int = 200_000, console=None,
-              engagement_brief: str = "") -> AgentRunResult:
+              engagement_brief: str = "",
+              context_window: int = 0, context_safety_margin: int = 8_000,
+              context_compress_at: int = 24_000) -> AgentRunResult:
     """自主 tool-loop:brain 決定每一步,工具層圍籬兜底。
 
     engagement_brief: RoE + OPPLAN + 跨會話記憶 的合成文本(借鑑
     Decepticon「行動前先注入紀律」;空字串 = 純預設行為)。
+
+    上下文管理(防爆 window):
+    - context_compress_at: 估算字元量(≈token×4)超過即壓縮舊工具輸出
+    - context_window: 模型真實 context window(0=不啟用硬防護);
+      以 API 回傳的 prompt_tokens 為準,逼近 window-安全邊界時強制深度壓縮,
+      仍超線則優美停止(附原因),不讓 API 直接 400 炸掉整輪
     """
     result = AgentRunResult()
     nagged = False  # finish 守門只擋一次
+    last_prompt_tokens = 0  # API 回傳的真實上下文用量(每步更新)
     if tools.ws is not None:
         result.workspace = str(tools.ws.root)
     opening = (f"Authorized target: {tools.target}\nGoal: {goal}\n"
@@ -616,6 +725,38 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
         {"role": "user", "content": opening},
     ]
     for step_i in range(max_steps):
+        # ---- 上下文防護(每步前):先壓估算超線,再查真實 prompt_tokens ----
+        est_chars = sum(_msg_chars(m) for m in messages)
+        if est_chars > context_compress_at:
+            messages, saved = compress_messages(messages)
+            if saved:
+                result.compressions += 1
+                result.context_saved_chars += saved
+                if console:
+                    console.print(f"  [dim]◌ context 壓縮:省 {saved} 字元"
+                                  f"(累計 {result.context_saved_chars})[/]")
+        if context_window and last_prompt_tokens:
+            ceiling = context_window - context_safety_margin
+            if last_prompt_tokens > ceiling:
+                # 逼近 window:深度壓縮(保留窗縮到 4、單則上限 600)
+                messages, saved = compress_messages(messages, keep_recent=4,
+                                                    max_tool_chars=600)
+                if saved:
+                    result.compressions += 1
+                    result.context_saved_chars += saved
+                    if console:
+                        console.print(f"  [yellow]◌◌ 深度壓縮(prompt_tokens="
+                                      f"{last_prompt_tokens}/{context_window}):"
+                                      f"再省 {saved} 字元[/]")
+                # 深度壓縮後估算仍超線 → 優美停止(讓 API 400 炸掉整輪沒有意義)
+                if sum(_msg_chars(m) for m in messages) // 3 > ceiling:
+                    result.summary = (f"context window 防護啟動:prompt_tokens≈"
+                                      f"{last_prompt_tokens} 逼近上限 {context_window},"
+                                      f"深度壓縮仍不足,優美停止(保留 {len(result.findings)} "
+                                      f"項發現照常出報告)")
+                    if console:
+                        console.print(f"  [red]✖ {result.summary}[/]")
+                    break
         try:
             out = brain.step(messages)
         except Exception as e:  # noqa: BLE001
@@ -623,6 +764,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
             break
         result.steps += 1
         result.tokens += out.get("tokens", 0)
+        last_prompt_tokens = max(last_prompt_tokens, out.get("prompt_tokens", 0))
         thought = out.get("thought", "")
         if console:
             console.print(f"  [magenta]◈ step {step_i+1}[/] {thought[:180]}")
@@ -671,6 +813,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                 cve=cve_arg,
                 confidence=float(args.get("confidence", 0.6)),
                 triage_score=tr.score, triage_factors=tr.factors, kev=kev_hit,
+                owasp=str(args.get("owasp", ""))[:10].strip().upper(),
                 exfiltrated=exfil,
             )
             result.findings.append(f)
@@ -707,6 +850,12 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                 s = (f"評估結束:{len(result.findings)} 項發現已記錄,"
                      f"{result.probes} 次探測 / {result.steps} 步。")
             result.summary = s
+            # finish.achieved:目標達成項 → 報告 §3 Achieved(上限 8 筆防灌)
+            ach_in = args.get("achieved")
+            if isinstance(ach_in, (list, tuple)):
+                result.achieved = [str(x)[:300] for x in ach_in if str(x).strip()][:8]
+            elif isinstance(ach_in, str) and ach_in.strip():
+                result.achieved = [ach_in.strip()[:300]]
             break
         else:
             obs = tools.call(tool, args)
@@ -726,9 +875,10 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
             f"{json.dumps(obs.data, ensure_ascii=False, default=str)[:4000] if obs.data is not None else ''}"
             f"\n(remaining: {max_steps - step_i - 1} steps, "
             f"{tools.max_probes - tools.probe_count} probes, "
-            f"~{max(token_budget - result.tokens, 0)} tokens)" + echo)})
+            + (f"~{max(token_budget - result.tokens, 0)} tokens)" if token_budget
+               else "tokens 不限)") + echo)})
 
-        if result.tokens > token_budget:
+        if token_budget and result.tokens > token_budget:
             result.summary = result.summary or "token budget 耗盡,自主循環停止"
             break
     else:
