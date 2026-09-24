@@ -115,7 +115,7 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
 
 ## 6. 實務坑與判讀守則（測試經驗提煉）
 
-1. **WAF 假陽性**：站前有 WAF（如 廠商 WAF-Blocker）時，探 `/.git/HEAD`、`/web.config`、
+1. **WAF 假陽性**：站前有商業 WAF 時，探 `/.git/HEAD`、`/web.config`、
    `/.env` 常回 **HTTP 200 + 封鎖頁**（含 `Unauthorized Activity Detected` 字樣）。
    這是防護生效，**不是漏洞**——先比對回應內文再報 finding。把這條寫進 `--goal` 可防 agent 誤報。
 2. **不信任自報版本**：指紋抓到的 `X-AspNetMvc-Version`、JS 檔頭版號僅作 CANDIDATE 線索；
