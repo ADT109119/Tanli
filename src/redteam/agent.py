@@ -682,12 +682,14 @@ def compress_messages(messages: list[dict], *, keep_recent: int = 8,
         if (i >= 2 and i < cut and m.get("role") == "user"
                 and c.startswith("[tool ") and len(c) > max_tool_chars
                 and "[compressed" not in c):
-            head = c[:max_tool_chars]
-            new_c = (head + f"\n[compressed: 原 {len(c)} 字元,中段省略。"
-                     "完整內容在 transcript / workspace tool-outputs,"
-                     "可用 read_tool_output 檢索]")
-            saved += len(c) - len(new_c)
-            m = {**m, "content": new_c}
+            suffix = (f"\n[compressed: 原 {len(c)} 字元,中段省略。"
+                      "完整內容在 transcript / workspace tool-outputs,"
+                      "可用 read_tool_output 檢索]")
+            head = c[:max(0, max_tool_chars - len(suffix))]
+            new_c = head + suffix
+            if len(new_c) < len(c):  # 邊界:原文剛過 threshold 時附加註解可能更長→跳過
+                saved += len(c) - len(new_c)
+                m = {**m, "content": new_c}
         out.append(m)
     return out, saved
 
