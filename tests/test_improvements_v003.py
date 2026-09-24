@@ -121,6 +121,61 @@ def test_single_narration_continues_loop(tools):
     assert any(t["tool"] == "narration(no-tool-call)" for t in res.transcript)
 
 
+class RecordingBrain:
+    """記錄每次 step() 收到的 messages(驗證迴圈注入的提醒文本)。"""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.received: list[list[dict]] = []
+
+    def step(self, messages):
+        self.received.append([dict(m) for m in messages])
+        item = self.script.pop(0) if self.script else {
+            "thought": "收尾", "tool": "finish", "args": {"summary": "end"}}
+        item = dict(item)
+        item.setdefault("tokens", 100)
+        item.setdefault("prompt_tokens", 500)
+        return item
+
+
+def test_major_finding_watchdog_reminds_once(tools):
+    """run6b 教訓回歸:thought 自述「重大發現」但零 add_finding 時,
+    下一步 tool 結果必須注入落檔提醒;且整個 run 只提醒一次。"""
+    brain = RecordingBrain([
+        {"thought": "**重大發現**:queryEvents 回傳了真實預約紀錄(含 patientId)",
+         "tool": "http_request",
+         "args": {"method": "POST",
+                  "url": "http://127.0.0.1:9/api/queryEvents",
+                  "body": "startdate=2020-01-01&enddate=2020-01-07"}},
+        {"thought": "繼續探", "tool": "fingerprint", "args": {}},
+        {"thought": "再探", "tool": "fingerprint", "args": {}},
+        {"thought": "done", "tool": "finish", "args": {"summary": "ok"}},
+    ])
+    res = run_agent(tools, brain, goal="t", max_steps=6)
+    # 只看最完整的一份快照(最後一步前的全量歷史),避免累積快照重疊重計
+    full = max(brain.received, key=len)
+    nag_count = sum(1 for m in full if m["role"] == "user"
+                    and "尚未 add_finding" in m["content"])
+    assert nag_count == 1  # 提醒恰一次( injected into one tool-result message only)
+    assert res.finished
+
+
+def test_major_finding_watchdog_silent_after_filing(tools):
+    """已立案後再喊重大發現:不重覆提醒(result.findings 非空)。"""
+    brain = RecordingBrain([
+        {"thought": "記一筆", "tool": "add_finding",
+         "args": {"title": "t", "severity": "low", "description": "d",
+                  "evidence": "e"}},
+        {"thought": "**重大發現**又一個", "tool": "fingerprint", "args": {}},
+        {"thought": "done", "tool": "finish", "args": {"summary": "ok"}},
+    ])
+    res = run_agent(tools, brain, goal="t", max_steps=5)
+    all_user_msgs = [m["content"] for snap in brain.received
+                     for m in snap if m["role"] == "user"]
+    assert not any("尚未 add_finding" in c for c in all_user_msgs)
+    assert len(res.findings) == 1
+
+
 def test_finish_refused_once_then_allowed(tools):
     """守門盲區回歸(run5 教訓):第一次 finish 被拒後,第二次 finish 必放行,
     且拒絶訊息要明示『再次 call finish 不再攔截』。"""

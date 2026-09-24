@@ -713,6 +713,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
     result = AgentRunResult()
     nagged = False  # finish 守門只擋一次
     narration_streak = 0  # 連續「純文字無 tool call」次數(run6 教訓,工具呼叫即重置)
+    finding_nagged = False  # 「重大發現未落檔」提醒只注入一次(run6b 教訓)
     last_prompt_tokens = 0  # API 回傳的真實上下文用量(每步更新)
     if tools.ws is not None:
         result.workspace = str(tools.ws.root)
@@ -898,6 +899,16 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
         if tool != "scratchpad" and getattr(tools, "scratchpad", None):
             echo = ("\n[your live checklist — honor open TEST items before finishing: "
                     + " | ".join(tools.scratchpad) + "]")
+        # run6b 教訓 watchdog:模型自述「重大發現」但本 run 零 add_finding →
+        # 立即提醒落檔,否則成果不會進報告(step41 教訓:說出發現却沒立案)
+        if (not finding_nagged and not result.findings
+                and tool != "add_finding"
+                and re.search(r"重大發現|重大线索|真實(預約|資料)紀錄?|成功取得",
+                              thought or "", re.I)):
+            finding_nagged = True
+            echo += ("\n[⚠ 你聲稱了重大發現但尚未 add_finding。若該觀察值得進報告,"
+                     "下一步請立即 add_finding(title/severity/description/evidence"
+                     "含逐字請求+回應/owasp),再繼續。報告只收錄已立案項目。]")
         messages.append({"role": "user", "content": (
             f"[tool {tool} -> {'OK' if obs.ok else 'FAIL'}] "
             f"{obs.note + ' | ' if obs.note else ''}"
