@@ -94,7 +94,7 @@ def test_narration_no_tool_call_not_treated_as_final(tools):
     第一次必須提示表態並續跑;第二次連續純文字才算真最終總結。"""
     brain = FakeBrain([
         {"tool": "fingerprint", "args": {}},
-        {"final": "分析:queryEvents 沒有 session 檢查,下一步要驗證..."},  # 旁白
+        {"final": "分析:queryEvents 端點沒有 session 檢查,下一步要驗證..."},  # 旁白
         {"tool": "http_request", "args": {"method": "GET", "path": "/x"}},          # 被提示後續跑
         {"final": "評估完成,全部線索閉合。"},                                        # 連續第二次?不,中間有工具→重置
         {"final": "最終總結。"},
@@ -142,7 +142,7 @@ def test_major_finding_watchdog_reminds_once(tools):
     """run6b 教訓回歸:thought 自述「重大發現」但零 add_finding 時,
     下一步 tool 結果必須注入落檔提醒;且整個 run 只提醒一次。"""
     brain = RecordingBrain([
-        {"thought": "**重大發現**:queryEvents 回傳了真實預約紀錄(含 patientId)",
+        {"thought": "**重大發現**:queryEvents 端點回傳了真實業務紀錄(含 patientId)",
          "tool": "http_request",
          "args": {"method": "POST",
                   "url": "http://127.0.0.1:9/api/queryEvents",

@@ -211,7 +211,7 @@ class AgentTools:
                             "as you learn (e.g. after every 2-3 probes), 'get' to recall it. "
                             "The current checklist is auto-echoed into every tool result, so "
                             "you never lose the plot after long outputs. Typical items: "
-                            "'TEST: getUserInfo param formats (cardNo/birthday/patientId)' / "
+                            "'TEST: endpointX param formats (id/date filters)' / "
                             "'DONE: endpoints enumerated' / 'DEAD: SQLi -> WAF blocks'."),
             "parameters": {
                 "type": "object",
@@ -903,7 +903,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
         # 立即提醒落檔,否則成果不會進報告(step41 教訓:說出發現却沒立案)
         if (not finding_nagged and not result.findings
                 and tool != "add_finding"
-                and re.search(r"重大發現|重大线索|真實(預約|資料)紀錄?|成功取得",
+                and re.search(r"重大發現|重大线索|真實(資料|紀錄|回應)|成功取得",
                               thought or "", re.I)):
             finding_nagged = True
             echo += ("\n[⚠ 你聲稱了重大發現但尚未 add_finding。若該觀察值得進報告,"
