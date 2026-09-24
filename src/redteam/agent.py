@@ -840,10 +840,15 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                                           "tool": "finish(deferred)", "args": args,
                                           "ok": False, "note": obs.note,
                                           "data_preview": ""})
-                messages.append({"role": "assistant", "content": thought or "[call finish]"})
+                messages.append({"role": "assistant", "content": thought or "[call finish]"}
+                                )
                 messages.append({"role": "user", "content":
                                  f"[tool finish -> REFUSED once] {obs.note}\n"
-                                 + " | ".join(open_tests)})
+                                 + " | ".join(open_tests)
+                                 + "\n(注意:本輪只擋這一次。處理完或決定放棄後,請務必"
+                                 "再次 call finish 並附 summary+achieved;不再攔截。"
+                                 "若寧可繼續探測,步驟預算耗盡時會強制停,但那時報告"
+                                 "將缺 achieved 欄。)"})
                 continue
             result.finished = True
             s = str(args.get("summary", "")).strip() or thought.strip()

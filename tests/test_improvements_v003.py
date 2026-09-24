@@ -89,6 +89,26 @@ def test_finish_achieved_collected(tools):
     assert res.findings[0].owasp == "A01"
 
 
+def test_finish_refused_once_then_allowed(tools):
+    """守門盲區回歸(run5 教訓):第一次 finish 被拒後,第二次 finish 必放行,
+    且拒絶訊息要明示『再次 call finish 不再攔截』。"""
+    from redteam.agent import AgentRunResult
+    tools.scratchpad = ["TEST 驗證 endpoint X 是否回 701"]
+    brain = FakeBrain([
+        {"thought": "想收工", "tool": "finish", "args": {"summary": "early"}},
+        {"thought": "補收", "tool": "finish",
+         "args": {"summary": "real", "achieved": ["線索已閉合"]}},
+    ])
+    res = run_agent(tools, brain, goal="t", max_steps=5)
+    assert res.finished and res.summary == "real"  # 第二次放行
+    assert res.achieved == ["線索已閉合"]
+    # transcript 有 deferred 記錄且拒絕訊息含再 finish 指引
+    deferred = [t for t in res.transcript if t["tool"] == "finish(deferred)"]
+    assert len(deferred) == 1
+    # 第二次 finish 不再擋:總步數=2
+    assert res.steps == 2
+
+
 # ---------------- 報告端修復 ----------------
 
 def _f(fid, sev, cat, owasp="", cve=""):
