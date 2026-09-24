@@ -58,6 +58,9 @@ class AgentTools:
         self._kb = None  # get_playbook 知識庫 lazy load
         self._get_cache: dict[str, ToolResult] = {}  # 安全方法結果快取(省預算)
         self.probe_log: list[ProbeLog] = []  # 跨會話記憶的探測軌跡(含失敗)
+        #: 本會話待辦清單(scratchpad 工具):每步自動回音進 tool 結果,
+        #: 防長輸出把「還沒驗的假設」衝出注意力窗口(單會話工作記憶)。
+        self.scratchpad: list[str] = []
 
     # ---- schema(提供給 brain) ----
     SCHEMAS: list[dict] = [
@@ -171,6 +174,15 @@ class AgentTools:
                     "path": {"type": "string"},
                     "offset": {"type": "integer", "description": "char offset (default 0)"},
                     "limit": {"type": "integer", "description": "max chars (default 6000)"},
+                    "pattern": {"type": "string",
+                                "description": ("regex search instead of paging: returns each "
+                                                "hit with context + char offset (max 12 shown; "
+                                                "result footer tells you the total and gives a "
+                                                "start_after value to page further). "
+                                                "Preferred for locating endpoints/params in "
+                                                "big offloaded files")},
+                    "start_after": {"type": "integer",
+                                    "description": "with pattern: skip hits at/before this offset (use the value from a previous footer)"},
                 },
                 "required": ["path"],
             },
@@ -189,6 +201,27 @@ class AgentTools:
                     "content": {"type": "string"},
                 },
                 "required": ["name", "content"],
+            },
+        },
+        {
+            "name": "scratchpad",
+            "description": ("Maintain a LIVE working checklist (hypotheses + next actions + "
+                            "dead ends) for THIS session. Call 'set' to replace the checklist "
+                            "as you learn (e.g. after every 2-3 probes), 'get' to recall it. "
+                            "The current checklist is auto-echoed into every tool result, so "
+                            "you never lose the plot after long outputs. Typical items: "
+                            "'TEST: getUserInfo param formats (cardNo/birthday/patientId)' / "
+                            "'DONE: endpoints enumerated' / 'DEAD: SQLi -> WAF blocks'."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "op": {"type": "string", "enum": ["get", "set"]},
+                    "items": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "full checklist (max 20 lines) — only for op='set'",
+                    },
+                },
+                "required": ["op"],
             },
         },
         {
@@ -380,14 +413,35 @@ class AgentTools:
                                  "playbooks": [d.render() for d in hits[:4]]})
 
     def _t_read_tool_output(self, path: str, offset: int = 0,
-                            limit: int = 6000) -> ToolResult:
+                            limit: int = 6000, pattern: str | None = None,
+                            start_after: int = 0) -> ToolResult:
         if self.ws is None:
             return ToolResult(False, None, "工作區未啟用(--workspace 關閉)")
         try:
             return ToolResult(True, {"path": path,
-                                     "content": self.ws.read_tool_output(path, offset, limit)})
+                                     "content": self.ws.read_tool_output(
+                                         path, offset, limit, pattern=pattern,
+                                         start_after=start_after)})
         except ValueError as e:
             return ToolResult(False, None, str(e))
+
+    def _t_scratchpad(self, op: str, items: list | None = None) -> ToolResult:
+        op = str(op).lower()
+        if op == "set":
+            if isinstance(items, str):
+                # LLM 常把清單 JSON 化成一字串 → 還原,避免整份清單被壓成單條
+                try:
+                    parsed = json.loads(items)
+                    items = parsed if isinstance(parsed, list) else [items]
+                except json.JSONDecodeError:
+                    items = [ln for ln in re.split(r"[\r\n]+", items) if ln.strip()]
+            if not isinstance(items, (list, tuple)):
+                items = [items] if items else []
+            self.scratchpad = [str(x)[:200] for x in items][:20]
+            if self.ws is not None:  # 順帶落盤:崩潰/中斷後可撿回
+                self.ws.write_note("_scratchpad", "\n".join(self.scratchpad))
+            return ToolResult(True, {"items": len(self.scratchpad)})
+        return ToolResult(True, {"items": self.scratchpad})
 
     def _t_write_note(self, name: str, content: str) -> ToolResult:
         if self.ws is None:
@@ -453,6 +507,10 @@ Method rules (mandatory):
 8. When you have exhausted reasonable checks (or budget), call finish with a summary.
 """ + GUARD_RULE + """
 Keep working notes via write_note for anything worth carrying to a next session.
+Working-memory rule: once you have a plan, keep it alive with the scratchpad tool
+(set a TEST/DONE/DEAD checklist after learning something new). The current
+checklist is echoed into every tool result — re-read it before each next action
+so unfinished hypotheses are never dropped.
 Think step by step; one tool call per message."""
 
 
@@ -543,6 +601,7 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
     Decepticon「行動前先注入紀律」;空字串 = 純預設行為)。
     """
     result = AgentRunResult()
+    nagged = False  # finish 守門只擋一次
     if tools.ws is not None:
         result.workspace = str(tools.ws.root)
     opening = (f"Authorized target: {tools.target}\nGoal: {goal}\n"
@@ -623,6 +682,24 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                               f" | triage {tr.score}"
                               f"{f' | exfil×{len(exfil)}' if exfil else ''})[/]")
         elif tool == "finish":
+            # 守門一次:scratchpad 仍有未完成 TEST 項 → 提醒續航(防 run1 式
+            # 「被中斷輸出帶走就提前 finish」)。只擋一次,尊重模型最終決定。
+            open_tests = [s for s in getattr(tools, "scratchpad", [])
+                          if re.match(r"^\s*(TEST|TODO|NEXT)", s, re.I)]
+            if open_tests and not nagged:
+                nagged = True
+                obs = ToolResult(False, {"open_items": open_tests},
+                                 "finish 暫拒:待辦清單仍有未完成項,先處理或改用 "
+                                 "scratchpad set 標記 DEAD/完成,再 finish")
+                result.transcript.append({"step": step_i + 1, "thought": thought[:500],
+                                          "tool": "finish(deferred)", "args": args,
+                                          "ok": False, "note": obs.note,
+                                          "data_preview": ""})
+                messages.append({"role": "assistant", "content": thought or "[call finish]"})
+                messages.append({"role": "user", "content":
+                                 f"[tool finish -> REFUSED once] {obs.note}\n"
+                                 + " | ".join(open_tests)})
+                continue
             result.finished = True
             s = str(args.get("summary", "")).strip() or thought.strip()
             if not s:
@@ -639,13 +716,17 @@ def run_agent(tools: AgentTools, brain, *, goal: str, max_steps: int = 30,
                                   "ok": obs.ok, "note": obs.note,
                                   "data_preview": str(obs.data)[:800]})
         messages.append({"role": "assistant", "content": thought or f"[call {tool}]"})
+        echo = ""
+        if tool != "scratchpad" and getattr(tools, "scratchpad", None):
+            echo = ("\n[your live checklist — honor open TEST items before finishing: "
+                    + " | ".join(tools.scratchpad) + "]")
         messages.append({"role": "user", "content": (
             f"[tool {tool} -> {'OK' if obs.ok else 'FAIL'}] "
             f"{obs.note + ' | ' if obs.note else ''}"
             f"{json.dumps(obs.data, ensure_ascii=False, default=str)[:4000] if obs.data is not None else ''}"
             f"\n(remaining: {max_steps - step_i - 1} steps, "
             f"{tools.max_probes - tools.probe_count} probes, "
-            f"~{max(token_budget - result.tokens, 0)} tokens)")})
+            f"~{max(token_budget - result.tokens, 0)} tokens)" + echo)})
 
         if result.tokens > token_budget:
             result.summary = result.summary or "token budget 耗盡,自主循環停止"

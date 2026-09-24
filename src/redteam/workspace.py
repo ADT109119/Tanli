@@ -65,14 +65,41 @@ class Workspace:
         return stub
 
     def read_tool_output(self, path_str: str, offset: int = 0,
-                         limit: int = 6000) -> str:
-        """讀回卸載內容(只允許本工作區 tool-outputs/ 內 — 路徑圍籬)。"""
+                         limit: int = 6000, pattern: str | None = None,
+                         start_after: int = 0) -> str:
+        """讀回卸載內容(只允許本工作區 tool-outputs/ 內 — 路徑圍籬)。
+
+        pattern 給定時改為正則搜尋:回傳每筆命中 ±200 字上下文與 char offset
+        (上限 12 筆)。動機:大輸出卸載後若癥結在中段,逐段翻讀既燒步數又
+        燒 token;搜尋讓 agent 一步定位,再依 offset 精讀。
+        """
         p = Path(path_str).resolve()
         allowed = (self.root / "tool-outputs").resolve()
         if not str(p).startswith(str(allowed) + "/") or not p.is_file():
             raise ValueError(f"僅允許讀取 {allowed}/ 下的卸載檔")
         text = p.read_text(encoding="utf-8", errors="replace")
-        return text[offset:offset + limit]
+        if not pattern:
+            return text[offset:offset + limit]
+        try:
+            rx = re.compile(pattern, re.I)
+        except re.error as e:
+            raise ValueError(f"非法正則: {e}")
+        hits: list[str] = []
+        last_end = 0
+        total = 0
+        for m in rx.finditer(text, max(0, int(start_after))):
+            total += 1
+            if len(hits) >= 12:
+                continue
+            s = max(0, m.start() - 200)
+            e = min(len(text), m.end() + 400)
+            hits.append(f"[@{m.start()}] …{text[s:e]}…")
+            last_end = m.end()
+        if not hits:
+            return f"(pattern {pattern!r} 無命中;檔長 {len(text)} chars)"
+        more = (f"\n[顯示 12/{total} 筆;要更多命中請帶 start_after={last_end} 再查一次]"
+                if total > 12 else f"\n[{total} 筆全部顯示]")
+        return f"(pattern={pattern!r})\n" + "\n----\n".join(hits) + more
 
     # ---- agent 筆記 -----------------------------------------------------
     def write_note(self, name: str, content: str) -> str:
