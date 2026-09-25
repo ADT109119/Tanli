@@ -40,15 +40,15 @@ openssl genpkey -algorithm Ed25519 -out signer_private.pem
 openssl pkey -in signer_private.pem -pubout -out signer_public.pem
 
 # 3. Issue the credential
-redteam gen-cred scope.yaml --key signer_private.pem -o credential.jws
+tanli gen-cred scope.yaml --key signer_private.pem -o credential.jws
 
 # 4. Run with the credential
-redteam run http://10.0.0.5 --auth-cred credential.jws
+tanli run http://10.0.0.5 --auth-cred credential.jws
 ```
 
 ## Reporting Vulnerabilities
 
-If you find a security issue in RedTeam Agent itself:
+If you find a security issue in Tanli (探驪) itself:
 
 - **Do not** open a public issue.
 - Email the maintainers, or open a private security advisory.

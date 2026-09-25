@@ -64,7 +64,7 @@
 
 ## 驗收（做完後必跑並把結果寫進你的最後回覆）
 ```bash
-cd ~/projects/redteam-agent
+cd ~/projects/tanli
 .venv/bin/python -m pytest tests/ -q          # 全綠
 .venv/bin/python -m redteam.cli self-test     # [PASS]，exit 0
 ```

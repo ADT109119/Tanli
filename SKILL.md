@@ -1,7 +1,7 @@
 ---
 name: tanli-redteam
 description: "Use when you need to run an authorized security assessment with the Tanli (探驪) autonomous red-team agent: fingerprinting, CVE intelligence, WAF-aware probing, and structured reports. Covers setup, RoE discipline, credential flow, agent tuning, and real-world pitfalls."
-version: 1.1.0
+version: 1.1.1
 license: Apache-2.0
 ---
 
@@ -160,6 +160,13 @@ Brain 取樣覆寫（gateway 調參用）：`REDTEAM_AGENT_TEMPERATURE`、`REDTE
 15. **純文字旁白誤收工已修（v0.0.3）**：模型約 1/6 機率回「空 tool_calls＋純文字分析」,
     舊版直接收工；現在第一次會提示續跑,連續第二次純文字才視為真總結。驅動時若看到
     「(narration → continue)」提示即此機制在運作。
+16. **除錯 gateway 認證別用 inline 明文 key**：AI 助理/日誌類工具常把命令中的
+    `Bearer sk-...` 自動塗改成遮罩字串再執行,造成「401 Authorization 格式錯誤」
+    的**假失敗**（特徵：同 key 打不驗 auth 的 /models 過、打 chat 死）。一律走
+    `.env` 檔＋SDK 從環境變數讀 key,可排除遮罩干擾。
+17. **free 模型上游可能整段掛**：gateway 回 502「上游 HTTP 400」多半是該免費
+    模型上游下線,與你的 key/程式無關；先拿上一輪成功模型跑最小 probe 對照,
+    別急著改 code。
 
 ## 7. LLM 應用目標（第二軌道）
 

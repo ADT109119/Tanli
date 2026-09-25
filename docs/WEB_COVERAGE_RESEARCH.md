@@ -1,6 +1,6 @@
 # Web 檢測覆蓋度研究任務
 
-項目: ~/projects/redteam-agent — 自動紅隊測試 Agent。
+項目: Tanli (探驪) — 自動紅隊測試 Agent。
 請求: 評估當前對**一般網站服務 (web_service)** 的安全檢測是否充足及其缺口，參照 OWASP Top 10 2021。
 
 ## 當前檢測手段（三層）

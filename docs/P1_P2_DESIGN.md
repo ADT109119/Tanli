@@ -1,7 +1,7 @@
 # P1 + P2 實現設計 — OWASP 映射層 + ZAP full-scan
 
 ## 背景
-redteam-agent 項目的 web_service 檢測覆蓋度研究已完結（docs/WEB_COVERAGE_FINAL.md）。
+Tanli(探驪)項目的 web_service 檢測覆蓋度研究已完結（docs/WEB_COVERAGE_FINAL.md）。
 核心缺口：
 - **P1**: findings.category 未標準化到 OWASP 2021 (A01-A10)，報告無法按 OWASP 聚合。
   規格書 §B (W-01~W-06) 聲稱的覆蓋骨架與實現之間有縫隙。

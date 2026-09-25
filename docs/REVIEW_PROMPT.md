@@ -1,6 +1,6 @@
-# RedTeam Agent 代碼審查任務
+# Tanli (探驪) 代碼審查任務
 
-請對 ~/projects/redteam-agent 這個自動紅隊測試 Agent 項目進行 deep code review。
+請對 ~/projects/tanli 這個自動紅隊測試 Agent 項目進行 deep code review。
 專注最近一次功能變更：**run 命令接入掃描器**（commit 401abd2）以及 **掃描結果→findings→LLM judge→報告管線**（commit b16a427）。
 
 ## 審查重點

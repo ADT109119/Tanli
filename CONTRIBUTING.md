@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to RedTeam Agent!
+Thanks for contributing to Tanli (探驪)!
 
 ## Security-sensitive project
 
@@ -23,7 +23,7 @@ pip install -e .
 
 - Python 3.11+
 - Run lint: `ruff` on `src/redteam/`
-- Run smoke test: `redteam --help` and `python -m pytest tests/`
+- Run smoke test: `tanli --help` and `python -m pytest tests/`
 
 ## Pull request workflow
 

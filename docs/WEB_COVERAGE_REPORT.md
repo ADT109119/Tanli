@@ -1,6 +1,6 @@
 # OWASP Top 10 (2021) Web 檢測覆蓋度研究與補全方案報告
 
-> **項目**: `redteam-agent` — 自動紅隊測試 Agent
+> **項目**: `Tanli (探驪)` — 自動紅隊測試 Agent
 > **日期**: 2026-08-14
 > **評估標準**: OWASP Top 10 (2021) Web Application Security Risks
 > **分析對象**: 當前三層掃描架構（Nuclei + sqlmap + OWASP ZAP baseline）及源碼實現 (`scanners.py`, `findings.py`)

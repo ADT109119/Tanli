@@ -188,7 +188,7 @@ Tanli's own agent also ingests user skills from `~/.tanli/skills/*.md` at runtim
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 226 tests, fully offline
+pytest tests/ -q          # 231 tests, fully offline
 tanli self-test           # lab end-to-end smoke, all-PASS required
 ```
 
@@ -197,7 +197,7 @@ tanli self-test           # lab end-to-end smoke, all-PASS required
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / forty-four attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 33 web methodology incl. framework/CMS + infra exposure + field-distilled differential-testing families) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. v0.0.3 endurance layer: in-session context compression with `--context-window` guardrails, three-tier memory (scratchpad + regex search offload + finish gate), critical-finding watchdog, exfiltrated-data loop into report §3. All 226 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / forty-four attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 33 web methodology incl. framework/CMS + infra exposure + field-distilled differential-testing families) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. v0.0.3 endurance layer: in-session context compression with `--context-window` guardrails, three-tier memory (scratchpad + regex search offload + finish gate), critical-finding watchdog, exfiltrated-data loop into report §3. All 231 tests green.
 
 ## License
 
