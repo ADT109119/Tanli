@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -98,15 +99,18 @@ def _get_json(url: str, *, headers: dict[str, str] | None = None, timeout: int =
     # Accept 依 host 分流(實錄 2026-09-25 www.tph run):無腦對所有源發
     # vendor 型別 application/vnd.github+json,NVD 會回 406 Not Acceptable;
     # 只有 api.github.com 需要它,其餘源一律標準 application/json。
+    # 鐵律:用 urlsplit().hostname 嚴判,禁用子字串 in 判斷——否則查詢
+    # 關鍵字本身含 "api.github.com"(如 NVD keyword 查詢)會把 GITHUB_TOKEN
+    # 連同 vendor Accept 一起發給第三方源(agy review 實錘的憑證外洩路徑)。
+    is_github = urllib.parse.urlsplit(url).hostname == "api.github.com"
     base_headers = {
-        "Accept": ("application/vnd.github+json" if "api.github.com" in url
-                   else "application/json"),
+        "Accept": "application/vnd.github+json" if is_github else "application/json",
         "User-Agent": "tanli-cve-lookup",
     }
     base_headers.update(headers or {})
     req = urllib.request.Request(url, headers=base_headers)
     tok = os.environ.get("GITHUB_TOKEN", "")
-    if "api.github.com" in url and tok:
+    if is_github and tok:
         req.add_header("Authorization", f"Bearer {tok}")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
@@ -177,10 +181,20 @@ def ghsa_product(product: str, ecosystem: str) -> LookupResult:
     """產品級查詢:該套件的全部已發布 advisory(不按版本過濾)。"""
     eco = ECOSYSTEM_ALIAS.get((ecosystem or "").lower(), (ecosystem or "").lower())
     res = LookupResult(query=f"affects={product}&ecosystem={eco}")
+    qs = urllib.parse.urlencode({"affects": product, "ecosystem": eco,
+                                 "per_page": 50}, quote_via=urllib.parse.quote)
     try:
-        data = _get_json(
-            f"{GHSA_API}?affects={urllib.parse.quote(product, safe='')}"
-            f"&ecosystem={eco}&per_page=50")
+        data = _get_json(f"{GHSA_API}?{qs}")
+    except urllib.error.HTTPError as e:
+        if e.code == 422:
+            # GHSA 只認套件生態系;Apache/nginx 等伺服器軟體必 422。
+            # 如實轉譯並指路(與 version_watch 同規格),不讓模糊 422 遮蓋真相。
+            res.error = (f"GHSA 422:ecosystem={eco!r} 或 product={product!r} 不是"
+                         " GHSA 合法組合(伺服器軟體如 Apache/nginx/IIS 不在套件生態系,"
+                         "應改用 NVD 關鍵字查詢)")
+        else:
+            res.error = f"GHSA 產品查詢失敗(HTTPError): {e}"
+        return res
     except Exception as e:  # noqa: BLE001
         res.error = f"GHSA 產品查詢失敗({e.__class__.__name__}): {e}"
         return res
@@ -357,6 +371,14 @@ def lookup(*, cve_id: str | None = None, product: str | None = None,
         merged.sources = [s for s, r_ in (("ghsa", g), ("osv", o)) if r_.ok]
         errs = [e for e in (g.error, o.error) if e]
         merged.error = "; ".join(errs) if not merged.sources else ""
+        # 生態系不合法(如 generic/Apache)→ GHSA+OSV 雙源皆死時自動降級
+        # NVD keyword(唯一涵蓋非套件生態的源),帶原錯誤作誠實備註。
+        if not merged.sources and errs:
+            n = nvd_search(keyword=product)
+            if n.ok:
+                n.query = f"nvd-kw {product} (降級:生態系 {ecosystem!r} 不被支援)"
+                n.error = ""  # 降級成功,原錯誤降格為來源備註
+                return n
         merged.latest_advisory_date = _latest_date(merged.advisories)
         return merged
 

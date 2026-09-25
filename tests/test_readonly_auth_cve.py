@@ -261,3 +261,72 @@ def test_get_json_accept_per_host(monkeypatch):
     assert captured["services.nvd.nist.gov"] == "application/json"
     assert captured["api.github.com"] == "application/vnd.github+json"
     assert captured["api.first.org"] == "application/json"
+
+
+def test_get_json_host_strict_match_no_token_leak(monkeypatch):
+    """agy review 實錘的安全隱患回歸:查詢關鍵字本身含 'api.github.com'
+    (如 NVD keyword 查 github 相關 CVE)時,子字串判斷會把 GITHUB_TOKEN
+    發給第三方源。hostname 嚴判後:不發 token、不發 vendor Accept。"""
+    import redteam.cve_lookup as cl
+    captured = {}
+
+    class FakeResp:
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["accept"] = req.get_header("Accept")
+        captured["auth"] = req.get_header("Authorization")
+        return FakeResp()
+
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_sensitivetoken")
+    monkeypatch.setattr(cl.urllib.request, "urlopen", fake_urlopen)
+    # query string 內含 api.github.com 字樣的 NVD 查詢
+    cl._get_json("https://services.nvd.nist.gov/rest/json/cves/2.0"
+                 "?keywordSearch=api.github.com+vulnerability")
+    assert captured["accept"] == "application/json"
+    assert captured["auth"] is None, "GITHUB_TOKEN 外洩給非 github 源!"
+    # 偽裝子域不騙過(hostname 嚴判)
+    cl._get_json("https://api.github.com.evil.example/x")
+    assert captured["accept"] == "application/json"
+    assert captured["auth"] is None
+
+
+def test_lookup_falls_back_to_nvd_on_illegal_ecosystem(monkeypatch):
+    """生態系不合法(如 generic)→ GHSA+OSV 雙源皆死時自動降級 NVD keyword。"""
+    import redteam.cve_lookup as cl
+
+    def fake_ghsa(product, ecosystem):
+        r = cl.LookupResult(query="x")
+        r.error = f"GHSA 422:ecosystem={ecosystem!r} 不是合法組合"
+        return r
+
+    def fake_osv(package, ecosystem, version=None):
+        r = cl.LookupResult(query="x")
+        r.error = "OSV 查詢失敗(HTTPError): 400"
+        return r
+
+    nvd_called = {}
+
+    def fake_nvd(*, keyword=None, cve_id=None):
+        nvd_called["keyword"] = keyword
+        r = cl.LookupResult(query=f"nvd-kw {keyword}")
+        r.sources = ["nvd"]
+        r.advisories = [cl.CveAdvisory(cve="CVE-2024-38477", source="nvd",
+                                       severity="high", summary="test")]
+        return r
+
+    monkeypatch.setattr(cl, "ghsa_product", fake_ghsa)
+    monkeypatch.setattr(cl, "osv_query", fake_osv)
+    monkeypatch.setattr(cl, "nvd_search", fake_nvd)
+    out = cl.lookup(product="Apache HTTP Server", ecosystem="generic")
+    assert nvd_called.get("keyword") == "Apache HTTP Server"
+    assert out.ok and out.sources == ["nvd"]
+    assert "降級" in out.query  # 誠實標註降級來源
