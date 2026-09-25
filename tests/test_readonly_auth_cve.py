@@ -5,6 +5,7 @@
 
 import json
 import sys
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -184,3 +185,79 @@ def test_watch_error_degrades_gracefully(monkeypatch):
     wr = watch("n8n", "npm", "2.39.4")
     assert not wr.passed and "GHSA 查詢失敗" in wr.error
     assert convert_all({"version_watch": [wr]}) == []  # 錯誤不產 finding 不 crash
+
+
+# ---------------------------------------------------------------------------
+# 3b. GHSA/NVD URL 構造回歸(實錄 2026-09-25 www.tph run 挖出的三個真 bug)
+# ---------------------------------------------------------------------------
+
+def test_query_ghsa_encodes_product_with_spaces(monkeypatch):
+    """含空格產品名必須 URL encode，否則 InvalidURL 崩潰(www.tph 實錄)。"""
+    import redteam.version_watch as vw
+    captured = {}
+
+    class FakeResp:
+        def read(self):
+            return b"[]"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["accept"] = req.get_header("Accept")
+        return FakeResp()
+
+    monkeypatch.setattr(vw.urllib.request, "urlopen", fake_urlopen)
+    out = vw.query_ghsa("Apache HTTP Server", "generic")
+    assert out == []
+    assert " " not in captured["url"], f"URL 殘留未 encode 空格: {captured['url']}"
+    assert "Apache%20HTTP%20Server" in captured["url"]
+    assert captured["accept"] == "application/vnd.github+json"  # GHSA 仍用 vendor 型別
+
+
+def test_query_ghsa_422_becomes_actionable_error(monkeypatch):
+    """GHSA 對非法 ecosystem 回 422 → 轉成可操作訊息(建議改走 NVD)。"""
+    import redteam.version_watch as vw
+
+    def boom(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 422, "Unprocessable Entity", {}, None)
+
+    monkeypatch.setattr(vw.urllib.request, "urlopen", boom)
+    with pytest.raises(ValueError) as ei:
+        vw.query_ghsa("Apache HTTP Server", "generic")
+    assert "NVD" in str(ei.value)  # 指路正確降級方向
+    wr = vw.watch("Apache HTTP Server", "generic", "2.4.58")  # 上層優雅降級不 crash
+    assert not wr.passed and "GHSA 查詢失敗" in wr.error
+
+
+def test_get_json_accept_per_host(monkeypatch):
+    """NVD 對 vendor 型別 Accept 回 406(www.tph 實錄)——只有 github API
+    發 vendor 型別,其餘源一律 application/json。"""
+    import redteam.cve_lookup as cl
+    captured = {}
+
+    class FakeResp:
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured[req.full_url.split("/")[2]] = req.get_header("Accept")
+        return FakeResp()
+
+    monkeypatch.setattr(cl.urllib.request, "urlopen", fake_urlopen)
+    cl._get_json("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2024-38477")
+    cl._get_json("https://api.github.com/advisories?cve_id=CVE-2024-38477")
+    cl._get_json("https://api.first.org/data/v1/epss?cve=CVE-2024-38477")
+    assert captured["services.nvd.nist.gov"] == "application/json"
+    assert captured["api.github.com"] == "application/vnd.github+json"
+    assert captured["api.first.org"] == "application/json"

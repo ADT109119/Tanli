@@ -95,11 +95,16 @@ class LookupResult:
 
 
 def _get_json(url: str, *, headers: dict[str, str] | None = None, timeout: int = 25):
-    req = urllib.request.Request(url, headers={
-        "Accept": "application/vnd.github+json",
+    # Accept 依 host 分流(實錄 2026-09-25 www.tph run):無腦對所有源發
+    # vendor 型別 application/vnd.github+json,NVD 會回 406 Not Acceptable;
+    # 只有 api.github.com 需要它,其餘源一律標準 application/json。
+    base_headers = {
+        "Accept": ("application/vnd.github+json" if "api.github.com" in url
+                   else "application/json"),
         "User-Agent": "tanli-cve-lookup",
-        **(headers or {}),
-    })
+    }
+    base_headers.update(headers or {})
+    req = urllib.request.Request(url, headers=base_headers)
     tok = os.environ.get("GITHUB_TOKEN", "")
     if "api.github.com" in url and tok:
         req.add_header("Authorization", f"Bearer {tok}")

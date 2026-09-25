@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -121,8 +123,17 @@ class VersionWatchResult:
 
 def query_ghsa(product: str, ecosystem: str, token: str | None = None,
                timeout: float = 20.0, page_size: int = 100) -> list[dict]:
-    """查 GHSA 該 package 的全部公告(GET only)。異常向上拋,呼叫端降級。"""
-    url = f"{GHSA_API}?ecosystem={ecosystem}&affects={product}&per_page={page_size}"
+    """查 GHSA 該 package 的全部公告(GET only)。異常向上拋,呼叫端降級。
+
+    實錄教訓(2026-09-25 www.tph run):
+    - product 含空格("Apache HTTP Server")未 encode 直接進 URL →
+      InvalidURL 崩潰,故參數一律 quote。
+    - ecosystem 非 GHSA 合法值(GHSA 只認 npm/pip/maven/...)→ 422,
+      轉成可操作中文訊息,讓 agent 知道該改走 NVD。
+    """
+    qs = urllib.parse.urlencode({"ecosystem": ecosystem, "affects": product,
+                                 "per_page": page_size}, quote_via=urllib.parse.quote)
+    url = f"{GHSA_API}?{qs}"
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "tanli-version-watch",
@@ -130,8 +141,16 @@ def query_ghsa(product: str, ecosystem: str, token: str | None = None,
     tok = token or os.environ.get("GITHUB_TOKEN", "")
     if tok:
         req.add_header("Authorization", f"Bearer {tok}")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        if e.code == 422:
+            raise ValueError(
+                f"GHSA 422:ecosystem={ecosystem!r} 或 product={product!r} 不是"
+                " GHSA 合法組合(伺服器軟體如 Apache/nginx/IIS 不在套件生態系,"
+                "應改用 cve_lookup 的 NVD 關鍵字查詢)") from e
+        raise
 
 
 #: GHSA ecosystem 正名(pypi 慣用寫法 -> GHSA 的 pip)
