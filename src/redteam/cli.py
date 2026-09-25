@@ -90,6 +90,7 @@ def run(
     read_only: bool = typer.Option(False, "--read-only", help="生產環境保險絲:HTTP 層物理封鎖非安全方法(僅 GET/HEAD/OPTIONS 離網),sqlmap/ZAP full/api 直接拒絕,nuclei 限速"),
     auth_header: Optional[str] = typer.Option(None, "--auth-header", help="每次請求附加標頭,例 'Authorization: Bearer *** -- 值絕不進報告/日誌"),
     cve_watch: bool = typer.Option(False, "--cve-watch", help="指紋若含 <pkg>@<ver> 宣告,查 GitHub Advisory DB 列適用未修 CVE+修復版"),
+    report_dir: str = typer.Option(".", "--report-dir", help="報告輸出目錄(自動建立;預設為目前工作目錄)"),
 ):
     """Run red-team assessment against a target."""
     cfg = Config.load(config_path)
@@ -386,9 +387,10 @@ def run(
 
     # If any scanner produced results, run them through judge + findings into report
     if scan_results:
-        _judge_and_report(target, scan_results, config_path=config_path, full=full)
+        _judge_and_report(target, scan_results, config_path=config_path, full=full,
+                          report_dir=report_dir)
     else:
-        out = report.write()
+        out = report.write(out_dir=report_dir)
         console.print(f"[bold green]Report: {out}[/]")
 
 
@@ -409,6 +411,7 @@ def scan(
     nuclei_severity: Optional[str] = typer.Option(None, "--nuclei-severity", help="nuclei -severity (default: low,medium,high,critical; pass '' to disable filter)"),
     nuclei_exclude_protocols: Optional[str] = typer.Option(None, "--nuclei-exclude-protocols", help="nuclei -exclude-protocols (default: dns,code,file,websocket,whois; pass '' to disable)"),
     read_only: bool = typer.Option(False, "--read-only", help="生產環境保險絲:sqlmap/ZAP full-api 直接拒絕,nuclei 限速(掃描器繞過 HTTP 客戶端,方法封鎖靠憑證 methods)"),
+    report_dir: str = typer.Option(".", "--report-dir", help="報告輸出目錄(自動建立;預設為目前工作目錄)"),
 ):
     """Run scanner(s) (nuclei/sqlmap/zap/all) against target in Docker sandbox."""
     scanners = ["nuclei", "sqlmap", "zap"] if scanner == "all" else [scanner]
@@ -476,11 +479,12 @@ def scan(
             results[scanner] = job.result
 
     # Convert scanner output -> Findings, then LLM judge, then report
-    _judge_and_report(target, results, config_path=config_path, full=full)
+    _judge_and_report(target, results, config_path=config_path, full=full,
+                      report_dir=report_dir)
 
 
 def _judge_and_report(target: str, results: dict[str, Any], *, config_path: str | None = None,
-                      full: bool = False) -> None:
+                      full: bool = False, report_dir: str = ".") -> None:
     """Turn raw scanner results into Findings, run LLM judge for false-positive
     triage, and emit a Markdown report (spec §6.4 / §11).
 
@@ -566,7 +570,7 @@ def _judge_and_report(target: str, results: dict[str, Any], *, config_path: str 
         )
     report.attach_exfil()
     n_exfil = len(report.exfiltrated)
-    out = report.write()
+    out = report.write(out_dir=report_dir)
     if n_exfil:
         console.print(f"[yellow]§3 偷到的資料:登錄 {n_exfil} 筆"
                       f"{'(已自動脫敏;--full 可保留原樣)' if not full else '(--full:未脫敏!)'}[/]")
@@ -740,6 +744,7 @@ def agent(
     roe_file: Optional[str] = typer.Option(None, "--roe", help="Rules of Engagement YAML(tanli roe --init 產生)"),
     workspace_dir: str = typer.Option("workspaces", "--workspace",
                                       help="engagement 工作區目錄(跨會話記憶+大輸出卸載);'none' 關閉"),
+    report_dir: str = typer.Option(".", "--report-dir", help="報告輸出目錄(自動建立;預設為目前工作目錄)"),
 ):
     """自主 Agent 模式:LLM tool-loop 自行規劃多步驟探測(指紋→產品級CVE→動態嘗試)。
 
@@ -875,7 +880,7 @@ def agent(
             audit["auth_hash"] = _hl.sha256(guard.credential_kid.encode()).hexdigest()[:12]
     except Exception:  # noqa: BLE001 — 稽核欄裝飾性資訊,取不到不阻斷報告
         pass
-    out = report.write(audit=audit)
+    out = report.write(out_dir=report_dir, audit=audit)
     console.print(f"[bold green]Report: {out}[/]")
     if n_exfil:
         console.print(f"[yellow]§3 偷到的資料:登錄 {n_exfil} 筆"

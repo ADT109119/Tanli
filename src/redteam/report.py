@@ -405,6 +405,8 @@ class ReportGenerator:
 
     def write(self, out_dir: str = ".", audit: dict | None = None) -> Path:
         ts = time.strftime("%Y%m%d_%H%M%S")
-        path = Path(out_dir) / f"report_{self.target.replace('://', '_').replace('/', '_')}_{ts}.md"
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        path = out / f"report_{self.target.replace('://', '_').replace('/', '_')}_{ts}.md"
         path.write_text(self.render(audit=audit))
         return path

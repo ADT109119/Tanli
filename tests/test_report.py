@@ -183,3 +183,19 @@ def test_exfil_markdown_backtick_escaping():
     sec3 = _sec3(r.render())
     assert "`` SELECT * FROM `users` ``" in sec3
 
+
+
+def test_write_out_dir_creates_nested_dirs(tmp_path):
+    """--report-dir 回歸:v0.0.3 前 write() 對不存在的目錄直接炸。"""
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    r.add_finding(_mk("f-d1", "high", "sqli", "A03"))
+    out = r.write(out_dir=str(tmp_path / "a" / "b"))
+    assert out.parent == tmp_path / "a" / "b"
+    assert out.exists() and out.read_text(encoding="utf-8").startswith("#")
+
+
+def test_write_out_dir_default_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    r = ReportGenerator("http://127.0.0.1/lab", "web_service")
+    out = r.write()
+    assert out.resolve().parent == tmp_path.resolve() and out.exists()
