@@ -51,7 +51,7 @@ Red teaming is that same dive: the truly critical vulnerabilities hide in the de
 - **Multi-step autonomous execution**: DAG planner + ReAct execution loop; the attack surface is routed automatically by target type
 - **Scanner automation**: nuclei / sqlmap / OWASP ZAP run fully autonomously inside Docker sandboxes; results are converted into findings automatically
 - **LLM attack playbooks**: eleven OWASP GenAI playbooks covering direct jailbreak, multi-turn escalation (Crescendo/Many-shot/Skeleton Key), persona virtualization, encoding obfuscation (Base64/cipher/low-resource/ASCII-art), indirect-injection weaponization (zero-click exfil/confused deputy/memory poisoning), reasoning-model attacks (Bad Likert Judge/Echo Chamber) and multimodal injection — baseline control + sentinel markers + deterministic rules + an LLM-judge second pass for false-positive filtering
-- **Framework & infrastructure exposure playbooks**: thirty web methodology playbooks — SQLi/XSS/SSRF/SSTI/CSRF/BOLA full-spectrum plus the CMS/framework misconfiguration family: WordPress config backups & xmlrpc amplification, Laravel `.env` / Django DEBUG / phpinfo probes, Spring Boot Actuator `/heapdump`, exposed `.git` & SourceMaps, plus the internet-scanner family: unauthenticated Redis/Elasticsearch, Jenkins/Tomcat admin consoles, Docker/K8s control planes, subdomain takeover, JWT stack flaws — all passive, evidence-only (endpoint + status + hash; leaked secrets are never downloaded or quoted)
+- **Framework & infrastructure exposure playbooks**: thirty-three web methodology playbooks — SQLi/XSS/SSRF/SSTI/CSRF/BOLA full-spectrum plus the CMS/framework misconfiguration family: WordPress config backups & xmlrpc amplification, Laravel `.env` / Django DEBUG / phpinfo probes, Spring Boot Actuator `/heapdump`, exposed `.git` & SourceMaps, plus the internet-scanner family: unauthenticated Redis/Elasticsearch, Jenkins/Tomcat admin consoles, Docker/K8s control planes, subdomain takeover, JWT stack flaws — plus field-distilled differential-testing playbooks (same-controller gate differentials, date-window pulls with negative-result foolproofing, WAF coverage differential + JS string-syntax-break detection) — all passive, evidence-only (endpoint + status + hash; leaked secrets are never downloaded or quoted)
 - **Automatic CVSS v3.1 scoring**: the official formula embedded (zero deviation from the authoritative library across all 2,592 vectors), with severity/category → vector mapping
 - **Human review gate**: every High/Critical finding is flagged "awaiting human confirmation"; the CLI warns explicitly until the report is finalized, so drafts never get published as official reports
 - **Signed authorization model**: localhost-only by default; widening scope requires an Ed25519 JWS-signed credential plus mandatory Scope Statement validation — crossing the line aborts the run
@@ -75,7 +75,7 @@ Full-auto scanner mode requires Docker (pulls the official nuclei/sqlmap/zap ima
 ## Quick start
 
 ```bash
-# 1. Offline self-test: spins up the local lab, 7 assertions end-to-end (recommended first step)
+# 1. Offline self-test: spins up the local lab, 8 assertions end-to-end (recommended first step)
 tanli self-test
 
 # 2. Preview the plan against a local target (no actual attacks)
@@ -103,14 +103,19 @@ tanli cve nginx                    # non-package ecosystems fall back to NVD key
 #    Engagement discipline: --roe loads a Rules-of-Engagement file and injects
 #    RoE + MITRE ATT&CK-mapped OPPLAN before the first packet (Decepticon-style);
 #    --workspace gives per-target cross-session memory + large-output offload
-#    (RedAmon-style); target responses pass prompt-injection guards.
+#    (RedAmon-style); a scratchpad working-memory tool + finish gate keep long
+#    runs on-task; --context-window guards against context blowouts (auto-compress);
+#    target responses pass prompt-injection guards.
 tanli agent http://127.0.0.1:8080 --steps 30 --probes 60
 tanli agent TARGET --auth-cred credential.jws --public-key signer_public.pem --read-only
+tanli agent TARGET --context-window 200000 --context-compress-at 24000   # long runs
+tanli agent TARGET --report-dir ~/tanli-data/reports                     # reports elsewhere
 tanli roe --init roe.yaml && tanli agent TARGET --roe roe.yaml
 ```
 
 `--scanners`: `auto` (default: web → all, llm_app → playbooks) | `none` | `web_config` | `nuclei` | `sqlmap` | `zap` | `llm_playbook`.
 ZAP depth: `--zap-mode baseline|full|api`; nuclei narrowing: `--nuclei-severity`, `--nuclei-exclude-protocols`.
+Agent context control: `--context-window 0` (default: no limit; when set, uses API-reported `prompt_tokens` and deep-compresses near the limit), `--context-compress-at <chars>` (compress threshold, default 24000), `--token-budget 0` (unlimited; hard caps remain `--steps`/`--probes`). Brain sampling overrides via `REDTEAM_AGENT_TEMPERATURE`, `REDTEAM_AGENT_MAX_TOKENS`, `REDTEAM_AGENT_EXTRA_BODY` (JSON, pass-through for gateway thinking toggles).
 
 ## Authorization model
 
@@ -161,7 +166,7 @@ Playbooks double as the autonomous agent's **attack-theory knowledge base**: `ta
 
 ## Reports
 
-Every run outputs `report_<target>_<timestamp>.md`:
+Every run outputs `report_<target>_<timestamp>.md` in the current working directory (override with `--report-dir <dir>`, created if missing):
 
 1. Executive summary with severity statistics (including the count of unreviewed high-risk findings)
 2. OWASP category rollup (including the OWASP GenAI LLM surface)
@@ -183,7 +188,7 @@ Tanli's own agent also ingests user skills from `~/.tanli/skills/*.md` at runtim
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 191 tests, fully offline
+pytest tests/ -q          # 226 tests, fully offline
 tanli self-test           # lab end-to-end smoke, all-PASS required
 ```
 
@@ -192,7 +197,7 @@ tanli self-test           # lab end-to-end smoke, all-PASS required
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / forty-one attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 30 web methodology incl. framework/CMS + infra exposure families) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. All 193 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / forty-four attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 33 web methodology incl. framework/CMS + infra exposure + field-distilled differential-testing families) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. v0.0.3 endurance layer: in-session context compression with `--context-window` guardrails, three-tier memory (scratchpad + regex search offload + finish gate), critical-finding watchdog, exfiltrated-data loop into report §3. All 226 tests green.
 
 ## License
 

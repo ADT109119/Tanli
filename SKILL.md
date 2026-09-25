@@ -1,7 +1,7 @@
 ---
 name: tanli-redteam
 description: "Use when you need to run an authorized security assessment with the Tanli (探驪) autonomous red-team agent: fingerprinting, CVE intelligence, WAF-aware probing, and structured reports. Covers setup, RoE discipline, credential flow, agent tuning, and real-world pitfalls."
-version: 1.0.0
+version: 1.1.0
 license: Apache-2.0
 ---
 
@@ -81,7 +81,7 @@ tanli agent "https://target.example.com/path" \
 
 | 命令 | 用途 | 關鍵參數 |
 |---|---|---|
-| `tanli agent <url>` | **自主 LLM tool-loop**（主力）：模型自行規劃探測步驟 | `--goal` `--steps` `--probes` `--token-budget` `--roe` `--workspace` `--no-docker` |
+| `tanli agent <url>` | **自主 LLM tool-loop**（主力）：模型自行規劃探測步驟 | `--goal` `--steps` `--probes` `--token-budget` `--roe` `--workspace` `--report-dir` `--context-window` `--context-compress-at` `--no-docker` |
 | `tanli run <url>` | 固定 6 節點 DAG（recon→fingerprint→inject→verify→poc→report），無需 LLM 也能跑 | `-t llm_app\|web_service\|hybrid` `--dry-run` `--scanners` `--resume` `--cve-watch` |
 | `tanli scan <url>` | Docker 沙箱跑 nuclei/sqlmap/zap | `-s nuclei\|sqlmap\|zap\|all` `--tags <CVE-ID>` `--zap-mode baseline\|full\|api` |
 | `tanli cve <ID或產品名>` | GHSA+OSV+NVD 三源 CVE 查詢 | `-e npm` `-v 3.5.1` `--json` |
@@ -101,6 +101,10 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
 
 其他：`REDTEAM_PUBLIC_KEY`（可替代 --public-key）、`REDTEAM_REVOKED_KIDS`（CRL 吊銷名單）、
 `REDTEAM_PLAYBOOK_DIR`、`REDTEAM_CVE_ECOSYSTEM`。
+
+Brain 取樣覆寫（gateway 調參用）：`REDTEAM_AGENT_TEMPERATURE`、`REDTEAM_AGENT_MAX_TOKENS`、
+`REDTEAM_AGENT_EXTRA_BODY`（JSON 字串，直接透傳 gateway 的 thinking 開關等 extra body；
+注意本專案不認 OpenAI 標準 `reasoning_effort`，thinking 開關走這裡）。
 
 ## 5. 安全圍籬（agent 繞不過，你也不用擔心失控）
 
@@ -138,6 +142,24 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
    排序照分數走；`auto-scored` 不等於人工確認過。
 10. **Cookie/session 探測**：預設不帶 cookie 的探測每次是新 session；需帶登入態時用
     `--auth-header "Cookie: <value>"`（值絕不進報告）。
+11. **長航上下文防護（v0.0.3）**：`--context-window <tokens>` 給定後以 API 回報的
+    `prompt_tokens` 為準——逼近上限先深度壓縮（舊工具輸出截頭＋卸載指針，零 LLM 成本），
+    仍超線則優美停止**保住已有報告**，不硬炸。`--context-compress-at`（預設 24000 字元）
+    控制何時開始壓縮。實測：不加防護時 22 步燒 20.5 萬 token 未收工；壓縮後同目標
+    正常 finish＋有 finding。
+12. **scratchpad 工作記憶（v0.0.3）**：agent 內建 `scratchpad` 工具維護 TEST/DONE/DEAD
+    待辦清單，每步自動回音；尚有未結項時 `finish` 會被擋一次（只擋一次，尊重模型最終
+    決定）。驅動 agent 時可在 `--goal` 要求「先立 scratchpad 計畫再探測」，可防中途
+    分心收工（run1 教訓：69KB 中斷輸出帶走注意力，step 11 就提前 finish）。
+13. **重大發現 watchdog（v0.0.3）**：agent 思考中出現重大發現措辭但整個 run 零立案時，
+    會自動注入一次「請落檔」提醒。看到報告 0 findings 但 transcript 有「重大發現」字樣,
+    就是 watchdog 也沒救回的情況——此時人工看 transcript 撿證據。
+14. **擷取資料閉環（v0.0.3）**：agent 宣稱擷取到敏感資料時走 `add_finding(exfiltrated_data=...)`
+    → 清洗 → 自動脫敏 → 報告 §3。judge 有反幻覺條款：宣稱擷取物未逐字見於證據不得
+    CONFIRM。`--full` 報告會如實標註 UNREDACTED 且終端警示。
+15. **純文字旁白誤收工已修（v0.0.3）**：模型約 1/6 機率回「空 tool_calls＋純文字分析」,
+    舊版直接收工；現在第一次會提示續跑,連續第二次純文字才視為真總結。驅動時若看到
+    「(narration → continue)」提示即此機制在運作。
 
 ## 7. LLM 應用目標（第二軌道）
 
@@ -145,7 +167,7 @@ export REDTEAM_JUDGE_MODEL="<model-id>"     # 例 your-model-id
 內含 11 本 OWASP GenAI playbook（越獄、提示注入、系統提示洩漏、過度代理、輸出處理、
 多輪遞進、人格虛擬化、編碼繞過、間接注入武器化、推理模型攻擊、多模態注入），
 基線對照 + 哨標 + 確定性規則 + LLM judge 二審。playbook 為 YAML 知識庫
-（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 30 本方法論劇本含
+（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 33 本方法論劇本含
 CMS/框架暴露面族 WordPress/Laravel/Actuator/.git 與互聯網掃描器族
 Redis/ES/Jenkins/Docker-K8s/子網域接管/JWT），可直接擴寫；`--playbook <file>` 指定單本。
 
@@ -158,3 +180,4 @@ Redis/ES/Jenkins/Docker-K8s/子網域接管/JWT），可直接擴寫；`--playbo
 | 作戰紀律包 | `workspaces/<ws>/<target>/engagement_package.json` |
 | 跨會話記憶 | `workspaces/<ws>/<target>/memory.json` |
 | 大輸出卸載 | `workspaces/<ws>/<target>/tool-outputs/` |
+| scratchpad 持久化 | `workspaces/<ws>/<target>/notes/_scratchpad.md` |
