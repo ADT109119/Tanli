@@ -46,6 +46,12 @@ Red teaming is that same dive: the truly critical vulnerabilities hide in the de
 | **LLM applications** | LLM APIs, RAG systems, AI agents | OWASP GenAI LLM Top 10 (jailbreaks, prompt injection, system-prompt leakage, excessive agency, output handling…) |
 | **Web services** | Web apps, REST/GraphQL APIs | OWASP Top 10 2021 (injection, authn, access control, misconfiguration, SSRF…) |
 
+## Execution map
+
+One CLI, three execution paths — all traffic to the target passes through the same safety fence; only `run`/`scan` can reach the Docker scanners, and the autonomous `agent` tool-loop never touches port scans or sqlmap. CVE lookups are pure control-plane traffic (GHSA/OSV/NVD, zero target probes).
+
+![Tanli execution map — modes, safety fence, and output paths](assets/execution-map.svg)
+
 ## Core capabilities
 
 - **Multi-step autonomous execution**: DAG planner + ReAct execution loop; the attack surface is routed automatically by target type

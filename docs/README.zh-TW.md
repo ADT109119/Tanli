@@ -46,6 +46,12 @@
 | **LLM 應用** | LLM API、RAG 系統、AI Agent | OWASP GenAI LLM Top 10（越獄、提示注入、系統提示洩漏、過度代理、輸出處理…） |
 | **網頁服務** | Web 應用、REST/GraphQL API | OWASP Top 10 2021（注入、認證、存取控制、配置、SSRF…） |
 
+## 運行路徑圖
+
+一條 CLI、三條執行路徑——所有對目標的流量都走同一套安全圍籬；只有 `run`/`scan` 能抵達 Docker 掃描器，自主 `agent` 工具迴圈碰不到埠掃描與 sqlmap。CVE 查詢為純控制面流量（GHSA/OSV/NVD，零目標探測）。
+
+![探驪 Tanli 運行路徑圖——模式、安全圍籬與產出路徑](../assets/execution-map.svg)
+
 ## 核心能力
 
 - **多步驟自主執行**：DAG 規劃器 + ReAct 執行循環，依目標類型自動路由攻擊面

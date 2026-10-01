@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 960" font-family="'JetBrains Mono','Cascadia Code',Consolas,'Noto Sans CJK TC','Microsoft JhengHei',monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#fb7185"/>
+    </marker>
+    <marker id="arr-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#22d3ee"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="960" fill="#020617"/>
+  <rect width="1280" height="960" fill="url(#grid)"/>
+
+  <!-- ===== arrows (drawn early, boxes on top) ===== -->
+  <g fill="none" stroke-width="1.5">
+    <!-- CLI to modes -->
+    <path d="M 560 128 L 215 166" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 610 128 L 550 166" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 690 128 L 875 166" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 760 128 L 1150 166" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <!-- modes to fence -->
+    <path d="M 215 420 L 215 456" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 550 420 L 550 456" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 875 420 L 875 456" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 1150 420 L 1150 456" stroke="#fb7185" stroke-dasharray="5,4" marker-end="url(#arr-rose)"/>
+    <!-- fence to docker, docker to target -->
+    <path d="M 290 540 L 290 576" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <path d="M 290 670 L 290 706" stroke="#94a3b8" marker-end="url(#arr)"/>
+    <!-- fence to target directly -->
+    <path d="M 550 540 C 550 620 480 640 420 706" stroke="#22d3ee" marker-end="url(#arr-cyan)"/>
+    <!-- agent to control-plane (routed around utility box on the far right) -->
+    <path d="M 1040 250 C 1250 250 1258 320 1258 420 C 1258 520 1235 570 1184 606" stroke="#22d3ee" stroke-dasharray="6,4" marker-end="url(#arr-cyan)"/>
+    <!-- fence to output -->
+    <path d="M 1120 540 C 1160 570 1200 620 1200 700 C 1200 760 1150 780 1100 806" stroke="#34d399" stroke-dasharray="6,4" marker-end="url(#arr)"/>
+  </g>
+  <g font-size="9" fill="#64748b">
+    <text x="1160" y="448" fill="#fb7185">gen-cred 憑證注入</text>
+    <text x="560" y="592" fill="#22d3ee">直接打目標:RedTeamHTTP</text>
+    <text x="560" y="608" fill="#22d3ee">(read-only=物理封鎖非安全方法)</text>
+    <text x="300" y="565">經圍籬調度</text>
+    <text x="1244" y="445" fill="#22d3ee" transform="rotate(90 1244 445)">CVE 控制面直連</text>
+    <text x="1130" y="770" fill="#34d399">發現 → 報告</text>
+  </g>
+
+  <!-- ===== title ===== -->
+  <text x="640" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#e2e8f0">探驪 Tanli — 運行路徑與模式總覽</text>
+  <text x="640" y="60" text-anchor="middle" font-size="10" fill="#64748b">三種執行模式共用同一套安全圍籬 · 掃描器走 Docker 硬化沙箱 · CVE 查詢為純控制面流量(零目標探測)</text>
+
+  <!-- ===== CLI entry ===== -->
+  <rect x="440" y="84" width="400" height="44" rx="6" fill="#0f172a"/>
+  <rect x="440" y="84" width="400" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="640" y="103" text-anchor="middle" font-size="14" font-weight="bold" fill="#67e8f9">tanli &lt;command&gt;</text>
+  <text x="640" y="120" text-anchor="middle" font-size="9" fill="#94a3b8">Typer CLI(套件名 tanli / 模組 redteam)</text>
+
+  <!-- ===== run ===== -->
+  <rect x="40" y="170" width="350" height="250" rx="6" fill="#0f172a"/>
+  <rect x="40" y="170" width="350" height="250" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="215" y="194" text-anchor="middle" font-size="14" font-weight="bold" fill="#6ee7b7">run — 固定 DAG 全自動</text>
+  <g font-size="11" fill="#cbd5e1">
+    <text x="56" y="218">規劃器是寫死的 6 節點 DAG</text>
+    <text x="56" y="236">(LLM 不擔任規劃者):</text>
+    <text x="56" y="254" fill="#6ee7b7">recon → fingerprint → inject</text>
+    <text x="56" y="272" fill="#6ee7b7">→ verify → poc → report</text>
+    <text x="56" y="294">LLM 僅任 judge 複核(FALSE POSITIVE</text>
+    <text x="56" y="312">判定,不可用時降級為確定式規則)</text>
+    <text x="56" y="334">--scanners auto:Web 目標=</text>
+    <text x="56" y="352">web_config+nuclei+sqlmap+zap</text>
+    <text x="56" y="370">LLM 目標=llm_playbook</text>
+    <text x="56" y="392">--dry-run 只看計畫 · --resume 斷點續跑</text>
+  </g>
+
+  <!-- ===== scan ===== -->
+  <rect x="410" y="170" width="280" height="250" rx="6" fill="#0f172a"/>
+  <rect x="410" y="170" width="280" height="250" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="550" y="194" text-anchor="middle" font-size="14" font-weight="bold" fill="#fdba74">scan — 單/多掃描器直打</text>
+  <g font-size="11" fill="#cbd5e1">
+    <text x="426" y="218" fill="#fdba74">nuclei | sqlmap | zap | all</text>
+    <text x="426" y="240">掃描器在 Docker 硬化沙箱內</text>
+    <text x="426" y="258">自行對目標發包(繞過專案內</text>
+    <text x="426" y="276">HTTP 客戶端 → ScopeGuard</text>
+    <text x="426" y="294">在掃描器路徑上另行把關)</text>
+    <text x="426" y="316">--read-only:sqlmap full/api</text>
+    <text x="426" y="334">直接拒絕 · nuclei 限速</text>
+    <text x="426" y="356">--network 指定容器出口</text>
+    <text x="426" y="378">結果 → judge → CVSS → 報告</text>
+    <text x="426" y="400">(無 Docker 時明確降級警告)</text>
+  </g>
+
+  <!-- ===== agent ===== -->
+  <rect x="710" y="170" width="330" height="250" rx="6" fill="#0f172a"/>
+  <rect x="710" y="170" width="330" height="250" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="875" y="194" text-anchor="middle" font-size="14" font-weight="bold" fill="#c4b5fd">agent — LLM tool-loop 自主</text>
+  <g font-size="10.5" fill="#cbd5e1">
+    <text x="726" y="216">模型自己決定每一步(迴圈:規劃→</text>
+    <text x="726" y="233">調工具→讀結果),僅 12 個工具:</text>
+    <text x="726" y="252" fill="#c4b5fd">http_request · fingerprint · cve_lookup</text>
+    <text x="726" y="269" fill="#c4b5fd">version_watch · web_config_probe</text>
+    <text x="726" y="286" fill="#c4b5fd">nuclei_cve_probe(僅 CVE/GHSA tag)</text>
+    <text x="726" y="303" fill="#c4b5fd">get_playbook · read_tool_output · write_note</text>
+    <text x="726" y="320" fill="#c4b5fd">scratchpad · add_finding · finish</text>
+    <text x="726" y="340" fill="#fda4af">✕ 無 port 掃描 ✕ 摸不到 sqlmap</text>
+    <text x="726" y="358">(主動注入引擎只存在於 run/scan)</text>
+    <text x="726" y="378">--steps/--probes/--token-budget/--context-window</text>
+    <text x="726" y="395">--roe 注入 RoE+OPPLAN · --workspace 跨會話記憶</text>
+    <text x="726" y="412">收尾必出 6 節報告 + transcript(事實式彙整)</text>
+  </g>
+
+  <!-- ===== utility ===== -->
+  <rect x="1060" y="170" width="180" height="250" rx="6" fill="#0f172a"/>
+  <rect x="1060" y="170" width="180" height="250" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1150" y="194" text-anchor="middle" font-size="13" font-weight="bold" fill="#e2e8f0">其他子命令</text>
+  <g font-size="10" fill="#cbd5e1">
+    <text x="1072" y="218" fill="#e2e8f0">self-test</text>
+    <text x="1072" y="234">離線雙行為靶場</text>
+    <text x="1072" y="248">8 斷言 · 免 Docker/金鑰</text>
+    <text x="1072" y="276" fill="#e2e8f0">cve &lt;ID|產品&gt;</text>
+    <text x="1072" y="292">GHSA+OSV+NVD 三源</text>
+    <text x="1072" y="306">+EPSS/KEV 標記</text>
+    <text x="1072" y="334" fill="#e2e8f0">gen-cred</text>
+    <text x="1072" y="350">Ed25519 簽發 JWS 憑證</text>
+    <text x="1072" y="364">(run/agent 需 --public-key 驗章)</text>
+    <text x="1072" y="392" fill="#e2e8f0">roe --init</text>
+    <text x="1072" y="408">產生參戰規則範本</text>
+  </g>
+
+  <!-- ===== fence band ===== -->
+  <rect x="40" y="460" width="1200" height="80" rx="6" fill="#0f172a"/>
+  <rect x="40" y="460" width="1200" height="80" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="640" y="482" text-anchor="middle" font-size="13" font-weight="bold" fill="#fda4af">安全圍籬 — 所有目標流量必經,模型與掃描器都繞不過</text>
+  <g font-size="10" fill="#fecdd3">
+    <text x="60" y="512">ScopeGuard:hosts/ports/paths/時間窗 fail-closed;無憑證 → 僅限 localhost;時間窗(--window)未到或過期直接拒跑</text>
+    <text x="60" y="530">--read-only:HTTP 層物理封鎖非安全方法(僅 GET/HEAD/OPTIONS) · --probes/--token 硬預算 · guard_observation:目標回應一律過提示注入防護</text>
+  </g>
+
+  <!-- ===== docker ===== -->
+  <rect x="100" y="580" width="380" height="90" rx="6" fill="#0f172a"/>
+  <rect x="100" y="580" width="380" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="290" y="602" text-anchor="middle" font-size="13" font-weight="bold" fill="#fcd34d">Docker 硬化掃描器沙箱</text>
+  <text x="290" y="624" text-anchor="middle" font-size="11" fill="#cbd5e1">nuclei · sqlmap · ZAP(僅 run / scan 可達)</text>
+  <text x="290" y="644" text-anchor="middle" font-size="10" fill="#94a3b8">agent 唯一能碰的掃描器=nuclei CVE 模板動態嘗試</text>
+
+  <!-- ===== control plane ===== -->
+  <rect x="780" y="580" width="400" height="90" rx="6" fill="#0f172a"/>
+  <rect x="780" y="580" width="400" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="980" y="602" text-anchor="middle" font-size="13" font-weight="bold" fill="#67e8f9">CVE 控制面 API(零目標流量)</text>
+  <text x="980" y="624" text-anchor="middle" font-size="11" fill="#cbd5e1">GHSA + OSV + NVD 交叉核實 · EPSS · CISA KEV</text>
+  <text x="980" y="644" text-anchor="middle" font-size="10" fill="#94a3b8">per-host Accept;GITHUB_TOKEN 只發 hostname==api.github.com</text>
+
+  <!-- ===== target ===== -->
+  <rect x="100" y="710" width="380" height="60" rx="6" fill="#0f172a"/>
+  <rect x="100" y="710" width="380" height="60" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="290" y="734" text-anchor="middle" font-size="13" font-weight="bold" fill="#e2e8f0">授權目標 Target</text>
+  <text x="290" y="754" text-anchor="middle" font-size="10" fill="#94a3b8">Web 服務 / LLM chat 端點(範圍由 scope 憑證定義)</text>
+
+  <!-- ===== output band ===== -->
+  <rect x="40" y="810" width="1200" height="110" rx="6" fill="#0f172a"/>
+  <rect x="40" y="810" width="1200" height="110" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="640" y="834" text-anchor="middle" font-size="13" font-weight="bold" fill="#6ee7b7">產出(一律 CWD 相對路徑,不寫入 site-packages)</text>
+  <g font-size="11" fill="#cbd5e1">
+    <text x="60" y="858">report_&lt;target&gt;_&lt;ts&gt;.md → --report-dir(預設目前目錄):6 節結構,§3 擷取資料自動遮罩,--full 解除遮罩需簽章憑證</text>
+    <text x="60" y="878">workspaces/&lt;slug&gt;/ → memory.json(跨會話發現/死路/教訓) · tool-outputs/(大輸出卸載) · notes/_scratchpad.md</text>
+    <text x="60" y="898">state/ → transcript 稽核鏈 · checkpoint(--resume) · engagement 包裹 · KEV 快取(皆 gitignored)</text>
+  </g>
+
+  <text x="640" y="944" text-anchor="middle" font-size="9" fill="#475569">探驪 Tanli · 自主紅隊測試 Agent · 圖與 v0.0.4 程式碼同步(agent.py / cli.py / scanners.py / auth.py)</text>
+</svg>
