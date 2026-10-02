@@ -148,3 +148,30 @@ def test_operator_doc_playbooks():
     for step in ("recon", "fingerprint", "probe", "automate", "verify", "poc"):
         assert step in kinds
     assert "參數化查詢" in d6.render()  # 升級:架構級修復原理入庫
+
+
+def test_public_disclosure_playbooks():
+    """公開通報蒸餾族(39-41):業務邏輯狀態機/請求來源信任/回調網址信任入庫可查。"""
+    lib = load_library()
+    for q, tid in [("邀請碼", "web-039"), ("優惠券", "web-039"),
+                   ("狀態機", "web-039"), ("X-Forwarded-For", "web-040"),
+                   ("轉發頭", "web-040"), ("稽核", "web-040"),
+                   ("重定向", "web-041"), ("回調", "web-041"),
+                   ("redirect", "web-041")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    for n in (39, 40, 41):
+        d = get_by_id(lib, f"web-{n:03d}")
+        assert d is not None and not d.executable, f"web-{n:03d} 必須是方法論劇本"
+        assert d.payload_policy == "methodology-only"
+        assert d.phase in ("recon", "fingerprint", "inject", "verify", "poc", "report"), \
+            f"web-{n:03d} phase 非法: {d.phase}"
+        # 誤報防呆與紅線敘事必須在知識文本裡
+        assert "嚴禁" in d.render(), f"web-{n:03d} 缺少紅線敘事"
+    # 核心方法論入庫(去識別化:不斷言任何可反向關聯受害站的通報流水號)
+    assert "三段證據鏈" in get_by_id(lib, "web-039").render()
+    assert "快取" in get_by_id(lib, "web-040").render()  # CDN 快取漂移歸因防呆
+    assert "密碼重設" in get_by_id(lib, "web-041").render()  # ATO 掛鏈分級
+    # web-032 暴露面擴張(自建 CMS 弱口令+監控設備)與 web-025 認證閘門差分入庫
+    assert "缺失性觀察" in get_by_id(lib, "web-032").render()
+    assert "認證閘門" in get_by_id(lib, "web-025").render()

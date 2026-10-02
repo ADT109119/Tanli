@@ -200,7 +200,7 @@ tanli self-test           # 靶場端到端煙霧測試,須全綠
 
 ## 專案狀態
 
-M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 四十四套攻擊劇本（LLM 11 套：5 執行型 + 6 越獄方法論；Web 33 套方法論含框架與基礎設施暴露面族＋實戰蒸餾差分族）/ CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。v0.0.3 長航層：會話內上下文壓縮與 `--context-window` 防護、三層記憶（scratchpad＋正則搜尋卸載＋finish 守門）、重大發現 watchdog、擷取資料閉環進報告 §3。v0.0.4：`--report-dir` 輸出目錄控制、CVE 控制面查詢加固（per-host Accept、hostname 嚴判防 token 外洩、URL 編碼修正、422 可操作降級指引）。231 項測試全綠。
+M1–M6 完成：CLI / 授權模型 / 規劃器 / 掃描器橋接 / findings 轉換 / LLM judge / 四十七套攻擊劇本（LLM 11 套：5 執行型 + 6 越獄方法論；Web 36 套方法論含框架與基礎設施暴露面族＋實戰蒸餾差分族＋公開通報蒸餾的業務邏輯狀態機／請求來源信任／回調網址信任族）/ CVSS 評分層 / 報告門禁與修復建議 / 雙行為靶場 self-test / RoE 作戰紀律 / 工作區跨會話記憶 / EPSS-KEV CVE 情報 / triage 風險分 / 使用者可注入技能。v0.0.3 長航層：會話內上下文壓縮與 `--context-window` 防護、三層記憶（scratchpad＋正則搜尋卸載＋finish 守門）、重大發現 watchdog、擷取資料閉環進報告 §3。v0.0.4：`--report-dir` 輸出目錄控制、CVE 控制面查詢加固（per-host Accept、hostname 嚴判防 token 外洩、URL 編碼修正、422 可操作降級指引）。232 項測試全綠。
 
 ## 授權條款
 

@@ -1,0 +1,27 @@
+id: web-041
+name: "回調網址信任缺陷:開放重定向盤點與高價值鏈掛鉤(重設信出境/SSO 回調)"
+owasp: A01/A08 (繞過授權檢查+軟體與資料完整性失敗)
+target_type: web_service
+phase: inject
+payload_policy: methodology-only
+side_effect_free: true
+
+summary: >
+  新變體族:web-010 只覆蓋 OAuth redirect_uri 分支,本劇本收「獨立於 OAuth 流程
+  之外」的通用回調網址信任缺陷——登入返回、登出跳轉、密碼重設信內連結、金流
+  回調、分享/預覽導流頁。核心缺陷:域名白名單以「開頭字串比對」實作,於是
+  whitelist.example.com.evil.tld(前綴拼接)與例 whitelist.example.com.attacker.tld
+  (子域偽裝)繞過。手法本質是「意圖導向參數」(redirect/target/return/next/goto/
+  url/dest 語義族)的值未做結構化比對(URL 解析後取 hostname 全等/尾綴+點)。
+  單獨 302 出境僅屬中低風險——findings 必須掛鏈才有通報價值:最高價值鏈是
+  「密碼重設信連結含回調參數 → token 出境 = ATO 鏈」,其次 SSO authorize 頁
+  回調參數(接 web-010)、金流回調金額確認頁跳轉(交易欺詐面)。
+  本劇本蒸餾自公開通報案例(已去識別化)。
+
+steps:
+  - recon: "意圖導向參數盤點(被動):抓 HTML/JS 抓『導向語義』參數名族(redirect/target/return/returnurl/next/goto/dest/destination/follow/url/continue 及其組合命名),記錄每個參數出現的頁面語境(登入/登出/重設信/金流/分享)。語境決定價值分級,這一步就決定了報告品質。"
+  - probe: "單發出境測試(受控):對每個候選參數放自己控制的良性域名(用自持的 redirect-probe 頁,或用 example.org 類文檔域名作觀察 302 Location),記錄:302 且 Location 全反射=無校驗;302 但被改寫回本站=有校驗(記錄校驗形態);400/403=有黑名單。每參數最多 1-2 發。"
+  - probe: "白名單繞過對照組(受控,兩類必測):對有白名單的參構造兩類對照——(a)前綴拼接:whitelist 域名字串後面直接拼 attacker 域(如 trusted-example.tld 放行時 attacker.tld 以 trusted-example.tld.evil.tld 過前綴比對);(b)真子域偽裝:attacker 持有一個以白名單域名為『開頭字串』的註冊域。兩類各一發,僅觀察 Location,不發送任何給真實用戶的連結。"
+  - verify: "掛鏈分級(核心紀律):單獨 302 出境=low/informational,不單獨立案為高風險。立項門檻按鏈路分級——(1)密碼重設信/驗證信內連結的回調參數可控=high~critical(token 出境 ATO 鏈;驗證方法:用自有帳號觸發重設信,檢查信內連結是否原樣攜帶可控 redirect 參數,嚴禁對他人信箱操作);(2)SSO/authorize 頁回調=critical 候選,轉 web-010 深測;(3)金流回調確認頁=medium(交易欺詐敘事面);(4)一般登入後返回頁=low。報告必須寫出完整攻擊敘事(受害者路徑+損失),不能只貼 302。"
+  - note: "修復建議(報告必附):白名單比對改為『解析 URL 後取 hostname 做全等或『.』+後綴比對』(拒絕字串 startsWith);跳轉前剝離 userinfo/fragment;重設信類連結原則禁止攜帶任何外部跳轉參數(重設頁落地後再導向);金流回調只接受伺服器側預登記的 URL 集合(引用 id 而非裸網址)。"
+  - reference: "蒸餾自台灣漏洞通報平台之公開通報案例(跨站重定向白名單驗證缺陷;受害站識別資訊已全部去識別化,不含可反向關聯之通報流水號)。CWE-601 (URL Redirection to Untrusted Site) + CWE-183 (Permissive List of Allowed Inputs)。對應 WSTG 4.1.4 Test Host Header / PortSwigger Open redirect research、OAuth 分支見 web-010(PortSwigger Top10 2024 #8/#10)。與 web-036 閘門差分同類思路:比對『校驗存在形態』而非只判通過與否。"
