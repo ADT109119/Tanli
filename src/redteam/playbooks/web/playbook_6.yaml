@@ -20,7 +20,7 @@ summary: >
   須人工證據鏈覆核。
 
 steps:
-  - recon: "枚舉輸入面:端點、登入表單、查詢參數、表單欄位、Cookie 值、HTTP 標頭(Referer/X-Forwarded-For 常被拼進日誌 SQL)。"
+  - recon: "枚舉輸入面:端點、登入表單、查詢參數、表單欄位、Cookie 值、HTTP 標頭(Referer/X-Forwarded-For 常被拼進日誌 SQL)。注意區分兩條信任鏈:標頭被拼進 SQL(本劇本)vs 標頭被直接當『用戶端身分』採信(轉發頭信任缺陷,屬 web-040 族)——同一個 X-Forwarded-For 可能同時踩兩條,發現其一要交叉檢查另一條。"
   - fingerprint: "DB 指紋:錯誤標記(ORA-/MySQL 語法提示/PostgreSQL 引號措辭/MSSQL 分行風格)判定引擎,決定後續語法方言(-- 與 # 與 /* */ 註釋變體、字串串接函數)。"
   - probe: "探測序列:' OR 1=1-- 永真式基線、1=1/1=2 布林對照、time-based sleep 單發延遲——三發內定性;全部使用 benign 邏輯式,嚴禁 UNION SELECT 真實敏感表、嚴禁 INTO OUTFILE/xp_cmdshell 任何變體(寫入/接管類在 read-only RoE 物理封鎖)。"
   - automate: "sqlmap --batch(以擷取的請求檔為輸入)僅用於『驗證存在性與覆蓋面』,產出全部標注 CANDIDATE——自報的注入點與資料擷取需人工覆核證據鏈(回應差異截圖/延遲分佈),patch 說已挖到 ≠ 已挖到。"

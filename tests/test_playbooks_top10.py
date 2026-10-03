@@ -175,3 +175,27 @@ def test_public_disclosure_playbooks():
     # web-032 暴露面擴張(自建 CMS 弱口令+監控設備)與 web-025 認證閘門差分入庫
     assert "缺失性觀察" in get_by_id(lib, "web-032").render()
     assert "認證閘門" in get_by_id(lib, "web-025").render()
+
+
+def test_zero_day_research_reinforcement():
+    """2026-10-03 公開通報研究補強批:web-032 弱口令證據方法論/web-006 信任鏈分岔/
+    web-023 教育類儲存點/web-030 目錄索引與活動殘件,入庫可查且紅線敘事齊全。"""
+    lib = load_library()
+    for q, tid in [("殭屍活動站", "web-032"), ("預設密碼", "web-032"),
+                   ("個資密度", "web-032"), ("目錄索引", "web-030"),
+                   ("社團", "web-023")]:
+        hits = {d.id for d in search(lib, query=q)}
+        assert tid in hits, f"查詢 {q} 未命中 {tid}: {hits}"
+    d32 = get_by_id(lib, "web-032")
+    # 非侵入性證據鏈:文件化口令線索 + 存在登入頁≠弱口令 防呆
+    assert "簡章" in d32.render() and "存在登入頁" in d32.render()
+    assert "pending-approval" in d32.render()
+    # web-006 信任鏈分岔必須交叉引用 web-040(轉發頭信任族)
+    d6 = get_by_id(lib, "web-006")
+    assert "web-040" in d6.render()
+    # web-030 目錄索引 probe 掛 web-032 立案紀律,嚴禁第三人資料落盤
+    d30 = get_by_id(lib, "web-030")
+    assert "Index of /" in d30.render() and "嚴禁下載" in d30.render()
+    # web-023 學校語境敘事三軸
+    d23 = get_by_id(lib, "web-023")
+    assert "學生會" in d23.render() and "審核意見" in d23.render()

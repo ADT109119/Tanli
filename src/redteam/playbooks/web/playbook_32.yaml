@@ -1,5 +1,5 @@
 id: web-032
-name: "管理控制台暴露與默認憑證面:Jenkins Script Console、Tomcat Manager、phpMyAdmin/Adminer"
+name: "管理控制台暴露與預設憑證面:Jenkins、Tomcat Manager、phpMyAdmin 與自建 CMS 弱口令/監控設備/殭屍活動站面"
 owasp: A07/A02 (OWASP Top10 2025 認證失敗+安全配置錯誤)
 target_type: web_service
 phase: recon
@@ -8,28 +8,34 @@ side_effect_free: true
 
 summary: >
   研究提煉(Trend Micro Jenkins 挖礦研究 + SANS ISC 掃描年報):管理介面是
-  mass scanner 的頭號獵物,因為一個默認憑證或匿名開關就等於整台機器的 shell。
+  mass scanner 的頭號獵物,因為一個預設憑證或匿名開關就等於整台機器的 shell。
   三族:(1)Jenkins /script(Groovy Script Console)——匿名或 weak auth 誤配時
   直接 RCE;真實 campaign 鏈:Groovy 腳本先殺掉佔用 >90% CPU 的競爭進程,
   探 /dev/shm 可寫性,下載挖礦 binary 以 SHA256 去重,再經 cron + systemd-run
   持久化並用 flock 保證單例——一份完整的『管理控制台→持久化』教科書。
-  (2)Tomcat /manager/html——默認 tomcat/tomcat、admin/admin 族,登陸成功後
+  (2)Tomcat /manager/html——預設 tomcat/tomcat、admin/admin 族,登入成功後
   WAR upload 部署即 RCE;/host-manager 同面。(3)phpMyAdmin/Adminer——
   /phpmyadmin /pma /adminer /db-admin 路徑輪轉+SANS ISC 常年熱掃目標,
-  root 空密碼或 mysql 默認帳密即整庫淪陷,phpmyadmin 歷史 LFI/SQLi 更讓
+  root 空密碼或 mysql 預設帳密即整庫淪陷,phpmyadmin 歷史 LFI/SQLi 更讓
   存在本身即攻擊面。另有兩個暴露面擴張(蒸餾自公開通報案例,已去識別化):
   (4)自建 CMS 後台+人為弱口令——非開源控制台,而是中小企業自建入口網站的
-  登入頁,防線只剩一個弱密碼,鎖碼/驗證碼/限流常全數缺失;(5)物聯網/監控
+  登入頁,防線只剩一個弱密碼,鎖碼/驗證碼/限流常全數缺失;短期生命週期的
+  活動/競賽平台尤其高危——臨時人員開帳號、口令採可推導規則(報名編號/
+  出生年月/單位縮寫類)、賽後不銷帳不關站,形成『殭屍活動站』結構性現象;
+  其弱口令的合規證據不是試登入,而是公開簡章/操作手冊/訓練教材 PDF 常寫死
+  的預設口令生成規則(文件化證據,零嘗試);(5)物聯網/監控
   設備 Web 管理介面——攝影機/NVR 內建網頁常有預設憑證與未授權快照/串流
   端點,設備直接暴露公網時整條鏈低門檻淪陷。
   唯讀紀律:以 401/403/登入頁指紋確認存在;
-  嚴禁嘗試任何默認憑證登錄(屬真實憑證攻擊,即使失敗也觸發目標審計日誌)、
+  嚴禁嘗試任何預設憑證登入(屬真實憑證攻擊,即使失敗也觸發目標審計日誌)、
   嚴禁碰 /script 執行。報告以『管理介面公網暴露+無第二因子/無來源限制』立 finding。
 
 steps:
   - probe: "存在性指紋(各一發 GET,只判狀態碼):/script 或 /jenkins/script(200+Groovy 表單=Critical 存在性證據,立即停手嚴禁執行)、/manager/html(401 Basic realm='Tomcat Manager Application' 指紋)、/phpmyadmin/ /adminer/ 登入頁特徵(版本字串入 CVE 比對)。"
   - probe: "版本與防護盤點(被動):登入頁/錯誤頁洩出的版本號(Jenkins X-Jenkins 標頭、phpMyAdmin 頁腳)、有無前置 WAF/認證閘道(401 來自應用還是邊界)、路徑是否被反向代理隱藏。管理介面『有認證』不等於安全:仍需報告暴破防護與來源限制。"
-  - probe: "自建 CMS 後台指紋盤點(純被動):非開源控制台的後台入口靠外形指紋——登入頁表單欄位名(user/admin 系)、頁尾版權+公司名組合、管理路徑慣例(/admin /backend /manage /cms 系)。只判定『存在+是否暴露』;密碼政策與登入防護以『缺失性觀察』記錄(表單有無 CAPTCHA、失敗有無鎖定/challenge 提示、有無來源限制宣告),嚴禁送出任何帳號密碼登錄請求(即使常見組合一發也屬憑證攻擊,與本劇本紅線一致)。"
+  - probe: "自建 CMS 後台指紋盤點(純被動):非開源控制台的後台入口靠外形指紋——登入頁表單欄位名(user/admin 系)、頁尾版權+公司名組合、管理路徑慣例(/admin /backend /manage /cms 系)。只判定『存在+是否暴露』;密碼政策與登入防護以『缺失性觀察』記錄(表單有無 CAPTCHA、失敗有無鎖定/challenge 提示、有無來源限制宣告),嚴禁送出任何帳號密碼登入請求(即使常見組合一發也屬憑證攻擊,與本劇本紅線一致)。"
+  - probe: "文件化預設口令線索採集(純公開資訊,零嘗試):活動/競賽/報名類平台的公開簡章、操作手冊、訓練教材 PDF 常明文寫死口令生成規則(例:『初期帳號為報名編號、預設密碼為證件號後四碼』類描述)。以公開搜尋+文件引用取得即為弱口令的合法證據鏈——遠比任何試登入乾淨且合規。證據記錄:文件來源類型+口令規則描述,不引用任何可反向關聯受害站的識別資訊。嚴禁把文件線索升級為實際登入驗證。"
+  - probe: "殭屍活動站生命週期判定(被動):短期活動/競賽/評審平台『上線即建帳號、賽後不銷帳不關站』是結構性現象,失養跡紋可當指紋用——Footer/標題含過期年份字串、倒數計時器或『報名截止』文案殘留、TLS 憑證過期或即將過期、Last-Modified 停在活動結束後。命中=該站的帳號與個資已無人維運看守,後台暴露的風險係數上調(與自建 CMS 指紋盤點步驟串接)。"
   - probe: "物聯網/監控設備管理面(被動一發):設備內建網頁路徑指紋(/web/embed /login.cgi /SDK/webLanguage 類特徵)、未授權快照/串流端點(snap/jpeg、live/preview 類慣例路徑)以單發 GET 判定是否無需憑證可達。證據僅記錄 HTTP 狀態碼、Content-Type 與 Content-Length,嚴禁在報告/工作區未遮蔽留存真實畫面(可能含可識別個人的影像,屬第三人隱私資料)。命中=high finding(監控畫面未授權可取,物理安全鏈崩潰),立即停手不做批量幀抓取。"
-  - note: "報告敘事與修復:管理控制台公網可達=Critical(無論有無默認憑證,暴露本身即高危——Shodan 上每個管理埠都被持續掃);修復:管理介面移出公網(VPN/零信任/跳板機+來源 IP ACL)、Jenkins 啟用 Matrix Authorization+關匿名+Script Console 按需關閉(Startup 參數 -Djenkins.install.runScriptSecurity)、Tomcat 刪 manager 或改 tomcat-users 強密碼+IP valve、phpMyAdmin 改路徑+SSO+移除安裝檔。"
+  - note: "弱口令立案紀律(核心防呆):『存在登入頁』≠『弱口令』,嚴禁把登入頁存在本身寫成弱口令 finding。合規立案軸為三件缺失——後台公網可達+無來源 IP 限制+無第二因子(皆為缺失性觀察),此三件僅足以立『管理介面公網暴露與認證防護不足』finding,嚴禁在無口令線索下推定為弱口令;唯有另取得文件化預設口令規則證據(見對應 probe)時,方可立案或升級為『弱口令/預設憑證候選』finding(標 pending-approval)。口令是否真的『弱』一律標 pending-approval,嚴禁實際登入驗證。個資端點(參與人員列表/報到/成績類)的觀察邊界:僅限未認證可直達的端點,或前端 JS 路由/Swagger 文件洩露的欄位定義——嚴禁以任何方式登入後探索;只記錄端點路徑與『個資密度分級』(欄位形態:識別碼/聯絡方式/所屬單位的組合等級),嚴禁發起批量遍歷、嚴禁落地任何名冊欄位實體數值。報告敘事與修復:管理控制台公網可達=Critical(無論有無預設憑證,暴露本身即高危——Shodan 上每個管理埠都被持續掃);修復:管理介面移出公網(VPN/零信任/跳板機+來源 IP ACL)、Jenkins 啟用 Matrix Authorization+關匿名+Script Console 按需關閉(Startup 參數 -Djenkins.install.runScriptSecurity)、Tomcat 刪 manager 或改 tomcat-users 強密碼+IP valve、phpMyAdmin 改路徑+SSO+移除安裝檔。活動/競賽平台另修:賽後限期銷帳關站(生命週期結案流程)、口令政策禁可推導規則、後台強制 TOTP。"
   - reference: "來源:Trend Micro《Turning Jenkins Into a Cryptomining Machine From an Attackers Perspective》(/dev/shm 探測、SHA256 去重、cron+systemd-run+flock 持久化鏈)、SANS ISC handler 日誌 adminer 掃描熱度、Tomcat 官方 Security Howto。弱口令/監控面蒸餾自台灣漏洞通報平台之公開通報案例(中小型入口網站弱口令面、監控設備整合商暴露面;受害站識別資訊已全部去識別化,不含可反向關聯之通報流水號)。OWASP WSTG 4.04.07 Test Upload of Unrestricted File / 4.1.05 guess username。"
