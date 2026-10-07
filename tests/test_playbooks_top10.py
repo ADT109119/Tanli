@@ -199,3 +199,58 @@ def test_zero_day_research_reinforcement():
     # web-023 學校語境敘事三軸
     d23 = get_by_id(lib, "web-023")
     assert "學生會" in d23.render() and "審核意見" in d23.render()
+
+
+def test_triage_matrix_playbook_and_reinforcement():
+    """2026-10-07 研究建議批次:新增 web-042 分診矩陣(上游分診層)+
+    web-036 資源形態差分/web-006 注入佇列與產業分級/web-030 LLM 金鑰分流/
+    web-020 登錄申報高危族/web-032 賽後殘件軸,入庫可查且紅線敘事齊全。"""
+    lib = load_library()
+    # --- web-042 新本體:可載入、非執行、phase 合法、關鍵詞可檢索 ---
+    d42 = get_by_id(lib, "web-042")
+    assert d42 is not None
+    assert not d42.executable and d42.payload_policy == "methodology-only"
+    assert d42.phase in ("recon", "fingerprint", "inject", "verify", "poc", "report")
+    for q in ("分診矩陣", "技術堆疊指紋", "產業資料敏感度"):
+        hits = {d.id for d in search(lib, query=q)}
+        assert "web-042" in hits, f"查詢 {q} 未命中 web-042: {hits}"
+    r42 = d42.render()
+    # 執行順序鐵律(暴露面優先)+煞車(憑證不做利用)+產業加權+誤報防呆三條回指
+    assert "暴露面優先" in r42 and "不做利用" in r42
+    assert "醫療" in r42 and "教育" in r42 and "公部門" in r42
+    for ref in ("web-006", "web-030", "web-036", "web-037", "web-038", "web-032"):
+        assert ref in r42, f"web-042 缺少對 {ref} 的分診交叉引用"
+    assert "台灣漏洞通報平台" in r42  # 出處去識別化(無通報流水號)
+    # --- web-036 資源形態差分:第一命中形態入庫 ---
+    d36 = get_by_id(lib, "web-036")
+    assert "資源形態差分" in d36.render()
+    assert "列表" in d36.render() and "單筆詳情" in d36.render()
+    assert "欄位全遮罩" in d36.render()  # 遮罩≠有授權檢查防呆
+    assert "Swagger" in d36.render()  # 詳情端點清單反推捷徑
+    # --- web-006 注入側:內容端點佇列+產業分級+假陰性防呆 ---
+    d6 = get_by_id(lib, "web-006")
+    r6 = d6.render()
+    assert "內容端點優先佇列" in r6 and "web-042" in r6
+    assert "web-038" in r6 and "時間盲注" in r6  # 假陰性改道,不得直接判無漏洞
+    assert "醫療" in r6  # 產業資料敏感度定錨
+    kinds6 = [s["name"] for s in d6.steps]
+    assert kinds6[-1] == "reference"  # note 不穿插 probe 紀律維持
+    # --- web-030 LLM/AI 金鑰分流+三軸影響敘事+雙橋接 ---
+    d30 = get_by_id(lib, "web-030")
+    r30 = d30.render()
+    assert "金鑰類型分流" in r30
+    assert "計費濫用" in r30 and "出境" in r30 and "第二信任邊界" in r30
+    assert "web-016" in r30 and "web-018" in r30  # 反向橋接+ACRSTEALER 同鏈
+    hits = {d.id for d in search(lib, query="AI 供應商金鑰")}
+    assert "web-030" in hits
+    # --- web-020 登錄/申報多租戶高危族+欄位白名單缺失性觀察 ---
+    d20 = get_by_id(lib, "web-020")
+    assert "登錄/申報" in d20.render()
+    assert "回應欄位白名單" in d20.render()
+    hits = {d.id for d in search(lib, query="登錄/申報")}
+    assert "web-020" in hits
+    # --- web-032 賽後登錄申報站殘件軸與 web-030 串接 ---
+    d32 = get_by_id(lib, "web-032")
+    assert "無人看守" in d32.render() and "web-030" in d32.render()
+    hits = {d.id for d in search(lib, query="賽後登錄")}
+    assert "web-032" in hits

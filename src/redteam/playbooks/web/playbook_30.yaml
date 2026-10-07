@@ -11,7 +11,8 @@ summary: >
   而是部署工藝缺陷——開發者在生產 web root 直接 git clone / git pull,或用
   rsync 全量同步未排除 .git,導致整個版本庫歷史公讀。危害遠大於『看到當前
   原始碼』:objects/ 保存每一個歷史 blob,即使當下版本已脫敏,歷史提交裡挖出
-  硬編碼 DB 密碼、API key、內部主機名是常態(『已刪掉』≠『已消失』);
+  硬編碼 DB 密碼、API key(含 LLM/AI 供應商金鑰——計費濫用/對話資料出境/模型路由
+  端點接管三軸獨立敘事)、內部主機名是常態(『已刪掉』≠『已消失』);
   config 檔的 remote URL 可能內嵌帶 token 的克隆地址;logs/HEAD reflog
   洩開發者活動軌跡。同族暴露:部署殘留 backup.sql、dumper.php、
   web 根目錄的 *.zip/*.tar.gz 打包備份、webpack SourceMap(.js.map)
@@ -24,9 +25,13 @@ summary: >
 
 steps:
   - probe: "存在性雙字串判定(各一發 GET):GET /.git/HEAD(200+body 以 'ref: refs/' 開頭=實錘)、GET /.git/config(200+含 '[core]' 段)。同族輪轉:.svn/entries、.hg/hgrc、.bzr/README、CVS/Root。全部 HEAD 或限長 GET,單檔判存在即止,嚴禁遞迴拉取 objects 重建倉庫。"
+  - probe: "歷史 commit 金鑰類型分流(判定框架,非拉取):評估暴露歷史中可能存在的憑據時按類型分流敘事——DB 憑證/內部主機名(傳統鏈)、第三方服務金鑰(支付/地圖/寄信)、以及 LLM/AI 供應商金鑰(OpenAI/Anthropic/Gemini/自架閘道 key,外形如 sk- 前綴類)與自訂模型路由端點 URL。金鑰類型決定影響敘事,不能一概而稱『API key 洩漏』。煞車鐵律:金鑰外形命中即立案,嚴禁以該金鑰向 AI 供應商 API 或自訂路由端點發起任何請求『驗證有效性』——有效性不由測試方驗證。"
+  - probe: "金鑰來源推定與交叉引用:若洩漏金鑰同時存在於開源產品 repo(寫死的預設值),適用『全站共用』推定——轉 web-016 硬編碼簽章金鑰族;若金鑰指向自訂模型路由端點,屬第二信任邊界——轉 web-018 AI 供應鏈族(ACRSTEALER 主題)。危害形態細目見下方 AI 金鑰三軸 note。"
   - probe: "建置殘件輪轉(HEAD 判存在):/backup.sql /database.sql /dump.sql /db.tar.gz /site.zip /public/backups/、Laravel /storage/export/、編輯器殘留(.DS_Store 洩目錄結構、Thumbs.db)。以 HEAD Content-Length 粗判體量;任何可下載檔案一律不真正下載落盤,證據=URL+大小+最後修改時間。"
   - probe: "目錄索引開啟盤點(低成本前置):HTTP 200 且回應含目錄索引結構特徵(<title>Index of / 或 <h1>Index of / 開頭+可排序欄位連結)=索引開啟——僅字串碰巧出現不算(自訂 404 頁/搜尋頁可能回顯路徑),須有表格結構——優先檢查上傳/附件/暫存目錄慣例路徑(/uploads /files /uploadfiles /temp /attach 系)與年份/活動編號子目錄(如 /upload/2024/、/activity/files/)。活動/競賽/報名類系統(見 web-032 殭屍活動站判定)的索引目錄最常殘留往年報名名單 CSV/XLSX、暫存打包檔、評審積分表。"
   - probe: "索引殘件證據鐵律:一律嚴禁下載任何檔案落盤(不論內容是否涉第三人資料——原始碼包/設定檔同樣是紅線),只記錄索引存在的目錄 URL 與清單中的檔名形態;證據=目錄 URL+檔名形態+檔名語意推定分級(見 web-032 立案紀律;僅由檔名語意推定,嚴禁為判斷分級而開檔或下載)。此族是目錄遍歷/路徑正規化族(web-012)之外最廉價的『結構性洩漏』路徑。"
   - probe: "SourceMap 與前端洩漏(被動):從頁面引用的 JS 找 //# sourceMappingURL= 註釋;存在 .js.map 時評估是否含原始變數名/內網 URL/內嵌 key(只抽樣看響應前段判定洩漏等級,不整檔入庫)。webpack 站常連 node_modules 路徑結構一起洩,列入暴露面清單。"
   - note: "報告敘事與修復:.git 暴露=Critical(等同全史原始碼+歷史憑證外洩;修復不是擋掉就好——git log -p 全史輪換所有歷史中出現過的憑據,git filter-repo 清史,部署改 git archive/rsync --exclude=.git + nginx location ~ /\\.(git|svn|hg) { deny all; })。備份檔可下載=High(移出版本庫+移出 web root+輪換內嵌憑據);SourceMap 含敏感=Medium(生產關 source-map 或僅傳錯誤監控平台)。"
+  - note: "LLM/AI 供應商金鑰洩漏的獨立影響敘事(有別於傳統 DB 憑證的三軸):1)計費濫用——key 立即被拿去跑生成任務,財務損耗以小時計,受害方常從帳單才發現;2)訓練/對話內容出境——提示詞、訓練資料與對話歷史的訪問邊界隨 key 移轉(是憑證被冒用,非伺服器被入侵);3)自訂模型路由端點接管——自架推理閘道/自訂 base URL 本身就是第二信任邊界,攻擊者借它繞過外層防禦(與 web-018 ACRSTEALER 主題同鏈)。"
+  - note: "AI 金鑰洩漏修復另加:LLM 供應商後台立即吊銷+建立用量告警、檢查該 key 的 permission scope(能否列出/下載微調檔)、自訂路由端點加來源限制;git 歷史側修復同上則 note(全史輪換+filter-repo 清史),只擋目錄不輪換憑據等於沒修。"
   - reference: "來源:Jsmon《Git Directory Exposure》(web root git clone 事故譜、objects/refs/config/index 各檔情報價值)、simonkoeck/git-exposed 與 GitSheriff 檢測器原理(HEAD/config 魔法字串)、OWASP WSTG 4.04.06 Test for Debugging Code & 4.04.03;修復工具鏈:git filter-repo、gitleaks/trufflehog 掃歷史。"

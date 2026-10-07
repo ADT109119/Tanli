@@ -21,9 +21,12 @@ summary: >
 
 steps:
   - recon: "枚舉輸入面:端點、登入表單、查詢參數、表單欄位、Cookie 值、HTTP 標頭(Referer/X-Forwarded-For 常被拼進日誌 SQL)。注意區分兩條信任鏈:標頭被拼進 SQL(本劇本)vs 標頭被直接當『用戶端身分』採信(轉發頭信任缺陷,屬 web-040 族)——同一個 X-Forwarded-For 可能同時踩兩條,發現其一要交叉檢查另一條。"
+  - recon: "內容端點優先佇列(legacy／外包站紀律):先建佇列再探測——枚舉所有 id/no/sn/code 語義參數與『列表→詳情』配對(公告/最新消息/活動明細一類內容端點是注入高發區),逐支入列探測,嚴禁全站盲掃;與上游分診矩陣(web-042)串接,暴露面(.git/.env)先掃完再回來打注入佇列。"
   - fingerprint: "DB 指紋:錯誤標記(ORA-/MySQL 語法提示/PostgreSQL 引號措辭/MSSQL 分行風格)判定引擎,決定後續語法方言(-- 與 # 與 /* */ 註釋變體、字串串接函數)。"
   - probe: "探測序列:' OR 1=1-- 永真式基線、1=1/1=2 布林對照、time-based sleep 單發延遲——三發內定性;全部使用 benign 邏輯式,嚴禁 UNION SELECT 真實敏感表、嚴禁 INTO OUTFILE/xp_cmdshell 任何變體(寫入/接管類在 read-only RoE 物理封鎖)。"
   - automate: "sqlmap --batch(以擷取的請求檔為輸入)僅用於『驗證存在性與覆蓋面』,產出全部標注 CANDIDATE——自報的注入點與資料擷取需人工覆核證據鏈(回應差異截圖/延遲分佈),patch 說已挖到 ≠ 已挖到。"
   - verify: "確認:auth bypass 或資料提取證據成立後重複一次即停(探測預算紀律);記錄盲注逐位還原的樣本(前 8 字元)作為證據,不整庫拖取。"
+  - verify: "舊站假陰性防呆(立案紀律):自訂 500 頁/WAF 遮罩/回顯被吃掉時,布林對照無差異不代表無注入——必須改走時間盲注對照(sleep 單發延遲 vs 對照組)並先做 WAF 覆蓋差分(web-038);僅憑『回應無差異』宣告無漏洞是假陰性;反之,時間盲注對照亦無延遲差異時,方可標 DEAD 退場結案(負樣本也要有對照組)。"
   - poc: "POC 記錄:原始請求+回應差異對照(永真 vs 永假)+時間測量;OOB 變體(僅限 allowed_out_of_band 白名單域:load_file/mirror DNS 通道)單發驗證即停。"
+  - note: "影響分級綁產業資料敏感度(立案紀律):同一個 in-band SQLi,形象站=中/高;醫療／教育／公部門=預設 High 起談——個資法敘事、識別碼可枚舉、舊站常與第二應用同庫同主機(橫向影響面)。分級寫入 finding 時附產業定錨依據,與 web-042 分診矩陣一致。"
   - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(SQLi 三族+AST 原理+參數化查詢段)。修復鐵律:參數化查詢/Prepared Statements、ORM 綁定、DB 帳號最小權限(禁 FILE/EXECUTE 權限)、自寫動態 SQL 需白名單欄位映射。"
