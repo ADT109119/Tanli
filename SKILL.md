@@ -174,10 +174,10 @@ Brain 取樣覆寫（gateway 調參用）：`REDTEAM_AGENT_TEMPERATURE`、`REDTE
 內含 11 本 OWASP GenAI playbook（越獄、提示注入、系統提示洩漏、過度代理、輸出處理、
 多輪遞進、人格虛擬化、編碼繞過、間接注入武器化、推理模型攻擊、多模態注入），
 基線對照 + 哨標 + 確定性規則 + LLM judge 二審。playbook 為 YAML 知識庫
-（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 37 本方法論劇本含
+（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 40 本方法論劇本含
 CMS/框架暴露面族 WordPress/Laravel/Actuator/.git 與互聯網掃描器族
 Redis/ES/Jenkins/Docker-K8s/子網域接管/JWT，另有外包／legacy 入口網站上游分診矩陣
-web-042），可直接擴寫；`--playbook <file>` 指定單本。
+web-042，以及嵌入式元件輔助端點族 web-043、入侵痕跡停火取證 web-044、邊界內孤兒資產 web-045），可直接擴寫；`--playbook <file>` 指定單本。
 
 ## 8. 產出物位置
 

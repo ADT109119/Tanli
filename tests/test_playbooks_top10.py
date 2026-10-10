@@ -254,3 +254,90 @@ def test_triage_matrix_playbook_and_reinforcement():
     assert "無人看守" in d32.render() and "web-030" in d32.render()
     hits = {d.id for d in search(lib, query="賽後登錄")}
     assert "web-032" in hits
+
+
+def test_component_forensics_orphan_batch():
+    """2026-10-10 研究建議批次:新增 web-043 元件輔助端點族/web-044 IOA 停火取證/
+    web-045 邊界內孤兒資產三本,補強 web-006 認證判定式與 re-score/web-037 欄位投射/
+    web-032 除錯入口/web-042 分診直連與套裝指紋/web-023 元件轉接。"""
+    lib = load_library()
+    legal = ("recon", "fingerprint", "inject", "verify", "poc", "report")
+    # side_effect_free 不在 PlaybookDoc 欄位上,直接讀 YAML 源檔驗證誠實性(agy 二審要求)
+    import yaml
+    from pathlib import Path
+    import redteam.knowledge as _kb
+    _pbdir = Path(_kb.__file__).resolve().parent / "playbooks" / "web"
+    for n in (43, 44, 45):
+        raw = yaml.safe_load((_pbdir / f"playbook_{n}.yaml").read_text(encoding="utf-8"))
+        assert raw.get("side_effect_free") is True, f"web-{n:03d} side_effect_free 非 True"
+    # --- web-043 元件輔助端點:可載入、非執行、紅線與防呆齊全 ---
+    d43 = get_by_id(lib, "web-043")
+    assert d43 is not None
+    assert not d43.executable and d43.payload_policy == "methodology-only"
+    assert d43.phase in legal
+    for q in ("connector", "檔案管理器", "富文本編輯器"):
+        hits = {d.id for d in search(lib, query=q)}
+        assert "web-043" in hits, f"查詢 {q} 未命中 web-043: {hits}"
+    r43 = d43.render()
+    assert "元件存在即暴露" in r43  # 核心成立模型
+    assert "上傳／寫入類子命令一律不發" in r43  # RoE 紅線:暴露即立案
+    assert "前端 JS 存在≠後端已部署" in r43  # 誤報防呆一
+    assert "web-013" in r43 and "web-042" in r43  # 生態定位+上游接入
+    assert "台灣漏洞通報平台" in r43
+    # --- web-044 IOA 停火:KB 首本取證型,停火機制明文化 ---
+    d44 = get_by_id(lib, "web-044")
+    assert d44 is not None
+    assert not d44.executable and d44.payload_policy == "methodology-only"
+    assert d44.phase in legal
+    hits = {d.id for d in search(lib, query="停火")}
+    assert "web-044" in hits
+    r44 = d44.render()
+    assert "轉通報即停火" in r44
+    assert "『檔案存在』≠『webshell』" in r44  # 取證誤報防呆
+    assert "CANDIDATE" in r44  # 無跨時點對照不得 CONFIRM 入侵
+    assert "web-043" in r44  # 與暴露面劇本的分工橋接
+    assert "不下載、不請求、不執行" in r44  # 取證零落地鐵律
+    assert "嚴禁遞迴遍歷目錄樹" in d43.render()  # 禁目錄爬取+禁下載實體檔
+    # --- web-045 孤兒資產:兩層供應鏈+不試口令紀律沿用 ---
+    d45 = get_by_id(lib, "web-045")
+    assert d45 is not None
+    assert not d45.executable and d45.payload_policy == "methodology-only"
+    assert d45.phase in legal
+    for q in ("孤兒資產", "BMS"):
+        hits = {d.id for d in search(lib, query=q)}
+        assert "web-045" in hits, f"查詢 {q} 未命中 web-045: {hits}"
+    r45 = d45.render()
+    assert "受測組織 ≠ 軟體作者" in r45  # 兩層供應鏈核心框架
+    assert "嚴禁主動構造請求打第三方服務" in d45.render()  # 禁對非授權目標發包
+    assert "pending-approval" in d45.render()  # 文件化口令命中即退場
+    assert "嚴禁試任何口令" in r45  # 沿用 web-032 不試口令鐵律
+    assert "web-032" in r45 and "web-030" in r45
+    # --- web-006 認證判定式分支+自報風險 re-score ---
+    d6 = get_by_id(lib, "web-006")
+    r6 = d6.render()
+    assert "認證判定式注入分支" in r6
+    assert "嚴禁真的以他人身分取得工作階段" in r6  # 證據成立但不越界
+    assert "自報風險" in r6 and "判定風險" in r6  # re-score 鐵律
+    # --- web-037 列表/分頁欄位過度投射軸 ---
+    d37 = get_by_id(lib, "web-037")
+    r37 = d37.render()
+    assert "欄位過度投射" in r37
+    assert "嚴禁真的把名單拉完" in r37  # 樣本上限即停
+    assert "遮罩郵件" in r37  # masked/明文分開計分
+    assert "嚴禁將名冊明文個資寫入" in r37  # 名冊個資零落地
+    assert "立即捨棄" in d6.render()  # auth-bypass 後 Session Cookie 捨棄防呆
+    hits = {d.id for d in search(lib, query="欄位過度投射")}
+    assert "web-037" in hits
+    # --- web-032 自架服務除錯入口軸與 web-045 橋接 ---
+    d32 = get_by_id(lib, "web-032")
+    r32 = d32.render()
+    assert "除錯入口面" in r32 and "web-045" in r32
+    # --- web-042 分診直連三線索+套裝產品指紋前置 ---
+    d42 = get_by_id(lib, "web-042")
+    r42 = d42.render()
+    assert "套裝產品名指紋" in r42
+    assert "web-043" in r42 and "web-045" in r42  # 分診矩陣接上三本新劇
+    assert "名單類端點" in r42  # (b) 線索直指 web-037 欄位投射
+    # --- web-023 編輯器欄位升級為元件面盤點 ---
+    d23 = get_by_id(lib, "web-023")
+    assert "web-043" in d23.render()

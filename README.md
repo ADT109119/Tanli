@@ -194,7 +194,7 @@ Tanli's own agent also ingests user skills from `~/.tanli/skills/*.md` at runtim
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -q          # 234 tests, fully offline
+pytest tests/ -q          # 235 tests, fully offline
 tanli self-test           # lab end-to-end smoke, all-PASS required
 ```
 
@@ -203,7 +203,7 @@ tanli self-test           # lab end-to-end smoke, all-PASS required
 
 ## Project status
 
-M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / forty-eight attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 37 web methodology incl. framework/CMS + infra exposure + field-distilled differential-testing families + business-logic/state-machine & request-origin-trust families distilled from public disclosure cases + an upstream triage-matrix layer for outsourced/legacy portals) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. v0.0.3 endurance layer: in-session context compression with `--context-window` guardrails, three-tier memory (scratchpad + regex search offload + finish gate), critical-finding watchdog, exfiltrated-data loop into report §3. v0.0.4: `--report-dir` output control, hardened CVE control-plane queries (per-host Accept headers, strict hostname token scoping, URL-encoding fixes, actionable 422 fallback guidance). All 234 tests green.
+M1–M6 complete: CLI / authorization model / planner / scanner bridge / findings conversion / LLM judge / fifty-one attack playbooks (11 LLM: 5 execution + 6 jailbreak-methodology; 40 web methodology incl. framework/CMS + infra exposure + field-distilled differential-testing families + business-logic/state-machine & request-origin-trust families distilled from public disclosure cases + an upstream triage-matrix layer for outsourced/legacy portals + embedded-component/forensic-triage/orphan-asset families) / CVSS scoring layer / report gate & remediation advice / dual-behavior lab self-test / RoE engagement discipline / workspace memory / EPSS-KEV CVE intelligence / triage scoring / user-injectable skills. v0.0.3 endurance layer: in-session context compression with `--context-window` guardrails, three-tier memory (scratchpad + regex search offload + finish gate), critical-finding watchdog, exfiltrated-data loop into report §3. v0.0.4: `--report-dir` output control, hardened CVE control-plane queries (per-host Accept headers, strict hostname token scoping, URL-encoding fixes, actionable 422 fallback guidance). All 235 tests green.
 
 ## License
 
