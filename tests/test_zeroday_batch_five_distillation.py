@@ -148,7 +148,8 @@ def test_新增步驟不得被render截斷():
         "web-020": ["嚴禁以『驗證破口存在』為名對真實資源發出 DELETE/PUT/PATCH", "資料可用性攻擊面", "一發即永久刪除他人資料"],
         "web-036": ["嚴禁以未登入差分全滅宣告該系統授權面安全"],
         "web-037": ["口令值與 hash 值嚴禁進報告"],
-        "web-032": ["嚴禁誇大寫成『校園系統遭入侵』"],
+        "web-032": ["嚴禁誇大寫成『校園系統遭入侵』",
+                   "嚴禁以任何方式登入後探索", "嚴禁發起批量遍歷", "嚴禁落地任何名冊欄位實體數值"],
         "web-030": ["嚴禁搜尋、枚舉或探測授權範圍外的第三方安裝點"],
         "web-042": ["病歷、醫療、基因、性生活、健康檢查、犯罪前科","特種個人資料"],
         "web-037": ["全字串遮蔽"],
@@ -166,6 +167,19 @@ def test_總數與去重():
     assert len(ids) == len(set(ids)), "id 重複"
     web = [i for i in ids if i.startswith("web-")]
     assert len(web) == 42 and len(ids) == 53  # 42 web + 11 llm
+
+
+def test_證據遮罩措辭全庫一致():
+    """agy v2 抓出的內部矛盾:probe 側『遮罩前 3 碼』與 note 側全遮罩鐵律衝突。"""
+    lib = _lib()
+    r37 = get_by_id(lib, "web-037").render()
+    assert "僅留遮罩前 3 碼" not in r37  # 舊措辭不得迴歸
+    assert "[MASKED_ID]" in r37  # probe 側同步全遮罩
+    # 曾被 render 截斷的 web-032 三條煞車句,拆步後必須可見
+    r32 = get_by_id(lib, "web-032").render()
+    for brake in ("嚴禁以任何方式登入後探索", "嚴禁發起批量遍歷",
+                  "嚴禁落地任何名冊欄位實體數值"):
+        assert brake in r32, f"web-032 煞車句仍不可見: {brake}"
 
 
 def test_agy複審修正_三HIGH不得迴歸():
