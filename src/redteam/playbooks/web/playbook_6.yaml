@@ -31,4 +31,5 @@ steps:
   - poc: "POC 記錄:原始請求+回應差異對照(永真 vs 永假)+時間測量;OOB 變體(僅限 allowed_out_of_band 白名單域:load_file/mirror DNS 通道)單發驗證即停。"
   - note: "影響分級綁產業資料敏感度(立案紀律):同一個 in-band SQLi,形象站=中/高;醫療／教育／公部門=預設 High 起談——個資法敘事、識別碼可枚舉、舊站常與第二應用同庫同主機(橫向影響面)。分級寫入 finding 時附產業定錨依據,與 web-042 分診矩陣一致。"
   - note: "自報風險 ≠ 判定風險(re-score 鐵律):通報/工單表單的自報風險值不得直接進報告——危害級由 Tanli 依 DB 引擎與認證上下文重算:可執行命令上下文(xp_cmdshell/LOAD_FILE 類)或可傾印全庫(Dump)引擎(MSSQL/Oracle)的注入,自報『低』一律重估為高危候選;反向亦然,自報嚴重但引擎指紋證明唯讀低權限帳號上下文時如實下修。判定依據(引擎+上下文)寫入 finding。"
+  - note: "re-score 鐵律的實證計數(公開通報佐證):連續多個觀測窗口的公開通報清單中,注入類案件幾乎全數自報『低』風險,其中含多件 MSSQL(可傾印全庫引擎)案件——本鐵律不是理論推演而是清單上的常態,分診時對任何自報低的注入案件一律走引擎+上下文重算,不得因自報低而降優先序。"
   - reference: "來源:操作者文件 Common_Web_Attack_Techniques.md(SQLi 三族+AST 原理+參數化查詢段)。修復鐵律:參數化查詢/Prepared Statements、ORM 綁定、DB 帳號最小權限(禁 FILE/EXECUTE 權限)、自寫動態 SQL 需白名單欄位映射。"

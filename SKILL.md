@@ -1,7 +1,7 @@
 ---
 name: tanli-redteam
 description: "Use when you need to run an authorized security assessment with the Tanli (探驪) autonomous red-team agent: fingerprinting, CVE intelligence, WAF-aware probing, and structured reports. Covers setup, RoE discipline, credential flow, agent tuning, and real-world pitfalls."
-version: 1.1.2
+version: 1.1.3
 license: Apache-2.0
 ---
 
@@ -167,6 +167,10 @@ Brain 取樣覆寫（gateway 調參用）：`REDTEAM_AGENT_TEMPERATURE`、`REDTE
 17. **free 模型上游可能整段掛**：gateway 回 502「上游 HTTP 400」多半是該免費
     模型上游下線,與你的 key/程式無關；先拿上一輪成功模型跑最小 probe 對照,
     別急著改 code。
+18. **劇本 RoE 紅線句要寫在步驟前段**：`render()` 每個步驟只取前 260 字、summary
+    只取前 400 字。把「嚴禁……」這類煞車句放在超長步驟尾端,YAML 裡還在、agent
+    卻永遠看不到——等於紅線失效。寫/改劇本時先拆步,再用測試斷言紅線句確實出現在
+    render 輸出內(見 tests/test_zeroday_batch_five_distillation.py 的截斷守門測試)。
 
 ## 7. LLM 應用目標（第二軌道）
 
@@ -174,7 +178,7 @@ Brain 取樣覆寫（gateway 調參用）：`REDTEAM_AGENT_TEMPERATURE`、`REDTE
 內含 11 本 OWASP GenAI playbook（越獄、提示注入、系統提示洩漏、過度代理、輸出處理、
 多輪遞進、人格虛擬化、編碼繞過、間接注入武器化、推理模型攻擊、多模態注入），
 基線對照 + 哨標 + 確定性規則 + LLM judge 二審。playbook 為 YAML 知識庫
-（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 40 本方法論劇本含
+（`src/redteam/playbooks/{web,llm}/*.yaml`，Web 軌道另有 42 本方法論劇本含
 CMS/框架暴露面族 WordPress/Laravel/Actuator/.git 與互聯網掃描器族
 Redis/ES/Jenkins/Docker-K8s/子網域接管/JWT，另有外包／legacy 入口網站上游分診矩陣
 web-042，以及嵌入式元件輔助端點族 web-043、入侵痕跡停火取證 web-044、邊界內孤兒資產 web-045），可直接擴寫；`--playbook <file>` 指定單本。
