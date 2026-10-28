@@ -13,6 +13,12 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/tanli/"><img src="https://img.shields.io/pypi/v/tanli?color=blue" alt="PyPI 版本" /></a>
+  <a href="https://pypi.org/project/tanli/"><img src="https://img.shields.io/pypi/pyversions/tanli" alt="Python 3.11+" /></a>
+  <a href="https://github.com/ADT109119/Tanli/actions/workflows/python-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/ADT109119/Tanli/python-publish.yml?label=publish" alt="發佈狀態" /></a>
+</p>
+
+<p align="center">
   <a href="#授權條款">授權條款：Apache-2.0</a> ·
   <a href="../SECURITY.md">安全與負責任使用</a> ·
   <a href="../CONTRIBUTING.md">貢獻指南</a>
@@ -69,11 +75,18 @@
 需要 Python >= 3.11。
 
 ```bash
-git clone https://github.com/ADT109119/Tanli.git && cd Tanli
-pip install -e .
+# 自 PyPI 安裝(建議——穩定版)
+pip install tanli
 
 # 冒煙測試(無依賴)
 tanli --help
+```
+
+自原始碼安裝(最新 main 分支,或開發用途):
+
+```bash
+git clone https://github.com/ADT109119/Tanli.git && cd Tanli
+pip install -e .
 ```
 
 掃描器全自動模式需要 Docker（拉取 nuclei/sqlmap/zap 官方鏡像）；LLM judge 需要任一 OpenAI 兼容端點（可選，無則降級為確定性規則）。

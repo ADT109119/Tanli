@@ -13,6 +13,12 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/tanli/"><img src="https://img.shields.io/pypi/v/tanli?color=blue" alt="PyPI version" /></a>
+  <a href="https://pypi.org/project/tanli/"><img src="https://img.shields.io/pypi/pyversions/tanli" alt="Python 3.11+" /></a>
+  <a href="https://github.com/ADT109119/Tanli/actions/workflows/python-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/ADT109119/Tanli/python-publish.yml?label=publish" alt="Publish status" /></a>
+</p>
+
+<p align="center">
   <a href="#license">License: Apache-2.0</a> ·
   <a href="SECURITY.md">Security &amp; Responsible Use</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
@@ -69,11 +75,18 @@ One CLI, three execution paths — all traffic to the target passes through the 
 Requires Python >= 3.11.
 
 ```bash
-git clone https://github.com/ADT109119/Tanli.git && cd Tanli
-pip install -e .
+# from PyPI (recommended — stable releases)
+pip install tanli
 
 # smoke test (no dependencies)
 tanli --help
+```
+
+From source (latest main, or for development):
+
+```bash
+git clone https://github.com/ADT109119/Tanli.git && cd Tanli
+pip install -e .
 ```
 
 Full-auto scanner mode requires Docker (pulls the official nuclei/sqlmap/zap images); the LLM judge requires any OpenAI-compatible endpoint (optional — falls back to deterministic rules without it).
